@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: prox-agent-api
+    env: python
+    buildCommand: cd api && pip install -r requirements.txt
+    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false # Set this securely in the Render dashboard

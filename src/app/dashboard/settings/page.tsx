@@ -1,0 +1,397 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+
+export default function SettingsPage() {
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [hasTwitterOAuth, setHasTwitterOAuth] = useState(false);
+    const [message, setMessage] = useState({ text: "", type: "" });
+    const router = useRouter();
+
+    const [formData, setFormData] = useState({
+        targetAudience: "",
+        targetPain: "",
+        ctaUrl: "",
+        competitor1: "",
+        competitor2: "",
+        accountConcept: "",
+        profile: "",
+        policy: "",
+        xApiKey: "",
+        xApiSecret: "",
+        xAccessToken: "",
+        xAccessSecret: "",
+        xAccountName: "",
+        xProfileImageUrl: "",
+        spreadsheetUrl: "",
+    });
+
+    useEffect(() => {
+        fetchSettings();
+    }, []);
+
+    const fetchSettings = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/settings");
+            if (res.ok) {
+                const data = await res.json();
+                setFormData({
+                    targetAudience: data.targetAudience || "",
+                    targetPain: data.targetPain || "",
+                    ctaUrl: data.ctaUrl || "",
+                    competitor1: data.competitor1 || "",
+                    competitor2: data.competitor2 || "",
+                    accountConcept: data.accountConcept || "",
+                    profile: data.profile || "",
+                    policy: data.policy || "",
+                    xApiKey: data.xApiKey || "",
+                    xApiSecret: data.xApiSecret || "",
+                    xAccessToken: data.xAccessToken || "",
+                    xAccessSecret: data.xAccessSecret || "",
+                    xAccountName: data.xAccountName || "",
+                    xProfileImageUrl: data.xProfileImageUrl || "",
+                    spreadsheetUrl: data.spreadsheetUrl || "",
+                });
+                setHasTwitterOAuth(!!data.hasTwitterOAuth);
+            }
+        } catch (error) {
+            console.error("Failed to fetch settings:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setMessage({ text: "", type: "" });
+
+        try {
+            const res = await fetch("/api/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formData),
+            });
+
+            if (res.ok) {
+                const updatedSettings = await res.json();
+                setFormData(prev => ({
+                    ...prev,
+                    xAccountName: updatedSettings.xAccountName || "",
+                    xProfileImageUrl: updatedSettings.xProfileImageUrl || ""
+                }));
+                setMessage({ text: "設定を保存しました。アカウント名とアイコンが反映されました。", type: "success" });
+                router.refresh(); // サイドバーなどのサーバーコンポーネントを再取得して表示を更新
+            } else {
+                setMessage({ text: "保存に失敗しました。", type: "error" });
+            }
+        } catch (error) {
+            setMessage({ text: "エラーが発生しました。", type: "error" });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDisconnectTwitter = async () => {
+        if (!confirm("本当にX (Twitter) の連携を解除しますか？ 自動投稿ができなくなります。")) return;
+
+        try {
+            const res = await fetch("/api/auth/disconnect/twitter", { method: "DELETE" });
+            if (res.ok) {
+                setMessage({ text: "X (Twitter) アカウントの連携を解除しました。", type: "success" });
+                setHasTwitterOAuth(false);
+                router.refresh();
+            } else {
+                setMessage({ text: "解除に失敗しました。", type: "error" });
+            }
+        } catch (error) {
+            setMessage({ text: "エラーが発生しました。", type: "error" });
+        }
+    };
+
+    return (
+        <div className="space-y-6 max-w-4xl">
+            <div>
+                <h2 className="text-3xl font-bold tracking-tight">設定・ペルソナ登録</h2>
+                <p className="text-muted-foreground mt-2">
+                    AIエージェントが投稿を生成する際の「あなたのアカウント専用のルールやペルソナ」を設定します。
+                </p>
+            </div>
+
+            {/* アカウント基本情報（最上部に独立） */}
+            <Card className="border-indigo-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+                <CardHeader>
+                    <CardTitle className="text-xl flex justify-between items-center">
+                        アカウント管理情報
+                        {formData.xProfileImageUrl && (
+                            <img src={formData.xProfileImageUrl} alt="icon" className="w-10 h-10 rounded-full border border-gray-200" />
+                        )}
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-2 max-w-md">
+                        <Label htmlFor="xAccountNameTop" className="text-gray-700 font-semibold">管理名 (任意)</Label>
+                        <Input
+                            id="xAccountNameTop"
+                            name="xAccountName"
+                            placeholder="例: メイン告知アカウント (空欄で自動取得)"
+                            value={formData.xAccountName}
+                            onChange={handleChange}
+                            className="bg-white"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                            空欄のまま下の「システム連携設定」でAPIキーを保存すると、Xの表示名(@ユーザー名)とアイコン画像が自動で取得・表示されます。
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>AI生成設定</CardTitle>
+                    <CardDescription>
+                        ここで設定した内容が、自動的に投稿生成AIへ引き継がれます。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="py-8 text-center text-gray-500">データを読み込み中...</div>
+                    ) : (
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="targetAudience">ターゲットペルソナ（誰に向けて発信するか）</Label>
+                                <Input
+                                    id="targetAudience"
+                                    name="targetAudience"
+                                    placeholder="例: SNS運用代行会社、個人事業主"
+                                    value={formData.targetAudience}
+                                    onChange={handleChange}
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="targetPain">ターゲットの主な悩み</Label>
+                                <Textarea
+                                    id="targetPain"
+                                    name="targetPain"
+                                    placeholder="例: フォロワーが伸びない、集客から販売につながらない"
+                                    value={formData.targetPain}
+                                    onChange={handleChange}
+                                    className="min-h-[100px]"
+                                    required
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="ctaUrl">誘導先（リードマグネット/プロラインのURL）</Label>
+                                <Input
+                                    id="ctaUrl"
+                                    name="ctaUrl"
+                                    type="url"
+                                    placeholder="https://proline.example.com/..."
+                                    value={formData.ctaUrl}
+                                    onChange={handleChange}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="competitor1">競合アカウント1（X ID名など）</Label>
+                                    <Input
+                                        id="competitor1"
+                                        name="competitor1"
+                                        placeholder="@example1"
+                                        value={formData.competitor1}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="competitor2">競合アカウント2</Label>
+                                    <Input
+                                        id="competitor2"
+                                        name="competitor2"
+                                        placeholder="@example2"
+                                        value={formData.competitor2}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-4 border-t mt-6">
+                                <h3 className="text-lg font-semibold">アカウント運用設定</h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="accountConcept">アカウントのコンセプト（全体像）</Label>
+                                    <Input
+                                        id="accountConcept"
+                                        name="accountConcept"
+                                        placeholder="例: 売上目標達成を支援する実践的なノウハウ発信"
+                                        value={formData.accountConcept}
+                                        onChange={handleChange}
+                                    />
+                                    <p className="text-xs text-muted-foreground">AIがブレない発信軸を持つための基準になります。</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="profile">発信者のプロフィール・立ち位置</Label>
+                                    <Input
+                                        id="profile"
+                                        name="profile"
+                                        placeholder="例: SNS集客のプロフェッショナル"
+                                        value={formData.profile}
+                                        onChange={handleChange}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="policy">全般的な運用方針 (マニュアル)</Label>
+                                    <Textarea
+                                        id="policy"
+                                        name="policy"
+                                        placeholder="例: 1日3投稿。図解を活用する。専門用語を避ける。"
+                                        value={formData.policy}
+                                        onChange={handleChange}
+                                        className="min-h-[80px]"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4 pt-4 border-t mt-6">
+                                <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)</h3>
+
+                                <div className="bg-blue-50 p-4 rounded-md border border-blue-100 mt-4">
+                                    <h4 className="font-medium text-blue-900 mb-2">【本番用】SaaS連携 (OAuth 2.0)</h4>
+                                    <p className="text-sm text-blue-800 mb-3">
+                                        ユーザーにAPIキーの取得をさせず、SaaS運営側が費用負担する本格展開用の連携方法です。
+                                    </p>
+                                    
+                                    {hasTwitterOAuth ? (
+                                        <div className="flex flex-col gap-3 items-start border-t border-blue-200 pt-3">
+                                            <div className="flex items-center gap-2 text-green-700 font-semibold text-sm">
+                                                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                                                現在、X (Twitter) アカウントと連携中です。
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs"
+                                                onClick={handleDisconnectTwitter}
+                                            >
+                                                連携を解除する
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="bg-black text-white hover:bg-gray-800 border-0 flex items-center gap-2"
+                                            onClick={() => signIn("twitter")}
+                                        >
+                                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+                                                <g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 22.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.008 5.96H5.078z"></path></g>
+                                            </svg>
+                                            X (Twitter) アカウントを連携する
+                                        </Button>
+                                    )}
+                                </div>
+
+                                <div className="bg-gray-50 p-4 rounded-md border mt-6">
+                                    <h4 className="font-medium text-gray-900 mb-2">【テスト用】個別APIキー設定 (BYOK)</h4>
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        各ユーザーが自身のDeveloper API通信費用を負担するテスト用の方法です。<br />
+                                        ※こちらの入力がある場合は優先して使用されます。
+                                    </p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="xApiKey">API Key</Label>
+                                            <Input
+                                                id="xApiKey"
+                                                name="xApiKey"
+                                                type="password"
+                                                value={formData.xApiKey}
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="xApiSecret">API Secret</Label>
+                                            <Input
+                                                id="xApiSecret"
+                                                name="xApiSecret"
+                                                type="password"
+                                                value={formData.xApiSecret}
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="xAccessToken">Access Token</Label>
+                                            <Input
+                                                id="xAccessToken"
+                                                name="xAccessToken"
+                                                type="password"
+                                                value={formData.xAccessToken}
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="xAccessSecret">Access Token Secret</Label>
+                                            <Input
+                                                id="xAccessSecret"
+                                                name="xAccessSecret"
+                                                type="password"
+                                                value={formData.xAccessSecret}
+                                                onChange={handleChange}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 外部ツール（スプレッドシート連携） */}
+                            <div className="space-y-4 pt-4 border-t mt-6">
+                                <h3 className="text-lg font-semibold">外部連携 (スプレッドシート・GAS)</h3>
+                                <div className="space-y-2">
+                                    <Label htmlFor="spreadsheetUrl">スプレッドシートWebアプリ(GAS)のURL</Label>
+                                    <Input
+                                        id="spreadsheetUrl"
+                                        name="spreadsheetUrl"
+                                        type="url"
+                                        placeholder="https://script.google.com/macros/s/.../exec"
+                                        value={formData.spreadsheetUrl}
+                                        onChange={handleChange}
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        過去のポストやインプレッション数、営業KPIなどを連携するためのエンドポイントURLです。
+                                    </p>
+                                </div>
+                            </div>
+
+                            {message.text && (
+                                <div className={`p-4 rounded-md mt-6 ${message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                                    {message.text}
+                                </div>
+                            )}
+
+                            <Button type="submit" disabled={saving} className="mt-4 w-full md:w-auto">
+                                {saving ? "保存中..." : "設定を保存する"}
+                            </Button>
+                        </form>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

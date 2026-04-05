@@ -1,0 +1,61 @@
+
+> sns-auto-saas@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.192:3000
+- Environments: .env.local, .env
+
+✓ Starting...
+✓ Ready in 1513ms
+ GET / 200 in 915ms (compile: 635ms, render: 280ms)
+[next-auth][warn][TWITTER_OAUTH_2_BETA] 
+https://next-auth.js.org/warnings#twitter_oauth_2_beta
+ GET /api/auth/session 200 in 945ms (compile: 907ms, render: 38ms)
+ GET /dashboard/proline 200 in 353ms (compile: 179ms, render: 173ms)
+ GET /api/auth/session 200 in 21ms (compile: 8ms, render: 13ms)
+ GET /api/auth/session 200 in 12ms (compile: 3ms, render: 9ms)
+ GET /dashboard 200 in 131ms (compile: 28ms, render: 103ms)
+ GET /api/auth/session 200 in 30ms (compile: 14ms, render: 16ms)
+ GET /api/auth/session 200 in 9ms (compile: 1887µs, render: 7ms)
+ GET /dashboard/knowledge 200 in 123ms (compile: 43ms, render: 81ms)
+ GET /api/auth/session 200 in 68ms (compile: 8ms, render: 60ms)
+ GET /api/knowledge 200 in 88ms (compile: 63ms, render: 25ms)
+ GET /api/auth/session 200 in 17ms (compile: 1559µs, render: 15ms)
+ GET /dashboard/generate 200 in 116ms (compile: 38ms, render: 78ms)
+ GET /api/knowledge 200 in 154ms (compile: 6ms, render: 148ms)
+ GET /api/auth/session 200 in 137ms (compile: 58ms, render: 80ms)
+ GET /api/kpi 200 in 167ms (compile: 67ms, render: 100ms)
+ GET /api/settings 200 in 171ms (compile: 115ms, render: 57ms)
+ GET /api/past-posts 200 in 176ms (compile: 140ms, render: 35ms)
+ GET /api/auth/session 200 in 16ms (compile: 4ms, render: 12ms)
+ GET /dashboard/generate 200 in 179ms (compile: 3ms, render: 176ms)
+ GET /api/settings 200 in 30ms (compile: 4ms, render: 27ms)
+ GET /api/kpi 200 in 40ms (compile: 11ms, render: 29ms)
+ GET /api/knowledge 200 in 42ms (compile: 6ms, render: 35ms)
+ GET /api/past-posts 200 in 43ms (compile: 8ms, render: 35ms)
+ GET /api/auth/session 200 in 19ms (compile: 7ms, render: 12ms)
+ GET /api/auth/session 200 in 9ms (compile: 1869µs, render: 7ms)
+ GET /dashboard/schedule 200 in 245ms (compile: 58ms, render: 187ms)
+ GET /api/auth/session 200 in 186ms (compile: 8ms, render: 179ms)
+ GET /api/posts 200 in 203ms (compile: 184ms, render: 19ms)
+ GET /api/auth/session 200 in 10ms (compile: 2ms, render: 8ms)
+ GET /dashboard/autoreply 200 in 201ms (compile: 52ms, render: 149ms)
+ GET /api/auth/session 200 in 53ms (compile: 4ms, render: 49ms)
+ GET /api/autoreply 200 in 68ms (compile: 51ms, render: 17ms)
+ GET /api/auth/session 200 in 17ms (compile: 2ms, render: 15ms)
+ GET /dashboard/kpi 200 in 177ms (compile: 49ms, render: 128ms)
+ GET /api/kpi 200 in 30ms (compile: 12ms, render: 18ms)
+ GET /api/auth/session 200 in 13ms (compile: 5ms, render: 8ms)
+ GET /api/auth/session 200 in 9ms (compile: 1983µs, render: 7ms)
+ GET /dashboard/analysis 200 in 135ms (compile: 68ms, render: 67ms)
+ GET /api/settings 200 in 23ms (compile: 6ms, render: 17ms)
+ GET /api/past-posts 200 in 28ms (compile: 3ms, render: 25ms)
+ GET /api/auth/session 200 in 22ms (compile: 6ms, render: 16ms)
+ GET /api/auth/session 200 in 9ms (compile: 1887µs, render: 7ms)
+ GET /api/auth/session 200 in 54ms (compile: 22ms, render: 32ms)
+ GET /api/auth/session 200 in 20ms (compile: 4ms, render: 16ms)
+ GET /api/auth/session 200 in 26ms (compile: 11ms, render: 15ms)
+ GET /api/auth/session 200 in 14ms (compile: 3ms, render: 11ms)
+ GET /api/auth/session 200 in 33ms (compile: 16ms, render: 17ms)

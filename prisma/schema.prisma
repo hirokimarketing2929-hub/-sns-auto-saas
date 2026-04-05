@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  accounts      Account[]
+  sessions      Session[]
+  settings      Settings? // 1対1でユーザー設定を持つ
+  posts         Post[]    // ユーザーは複数の投稿を持つ
+  pastPosts     PastPost[] // 追加：過去の投稿履歴
+  knowledges    Knowledge[] // 追加：AI抽出ナレッジ
+  kpiScenarios  KpiScenario[] // 追加：KPIシナリオ
+  autoReplyCampaigns AutoReplyCampaign[] // 追加：自動リプライキャンペーン
+  media         Media[] // ユーザーがアップロードしたメディア
+  
+  // サブスクリプション・ストレージ管理
+  plan          String   @default("FREE") // FREE, STANDARD, PRO
+  maxStorage    Int      @default(524288000) // バイト単位 (デフォルト500MB)
+  usedStorage   Int      @default(0) // 現在の使用量（バイト単位）
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  
+  access_token       String?  
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  
+  session_state      String?
+  accountName        String?  // 追加：ユーザーが任意に設定できる管理名
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// アプリ固有のモデル
+model Settings {
+  id           String @id @default(cuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  targetAudience String? @default("SNS運用代行会社、個人事業主")
+  targetPain     String? @default("フォロワーが伸びない、集客から販売につながらない")
+  ctaUrl         String? @default("https://proline.example.com")
+  competitor1    String? 
+  competitor2    String? 
+  
+  // ▼アカウントごとの固有設定（分析・自動生成用）▼
+  accountConcept String? @default("売上目標達成を支援する実践的なノウハウ発信")
+  profile        String? @default("SNS集客のプロフェッショナル")
+  policy         String? @default("1日3投稿。図解を活用する。専門用語を避ける。")
+  
+  // ポジティブリポジトリの判定しきい値
+  thresholdImpression Int? @default(1000)
+  thresholdConversion Int? @default(1)
+  
+  // X API 連携キー（MVP用）
+  xApiKey        String?
+  xApiSecret     String?
+  xAccessToken   String?
+  xAccessSecret  String?
+  xAccountName   String?  // 追加：手動連携アカウントの管理名
+  xProfileImageUrl String? // 追加：手動連携アカウントのアイコン画像URL
+
+  // 外部ツール（スプレッドシート・GAS）連携用
+  spreadsheetUrl String?
+
+  updatedAt    DateTime @updatedAt
+}
+
+// 過去の投稿履歴（分析・学習用データ）
+model PastPost {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content      String   // 実際の投稿テキスト
+  platform     String   @default("X")
+  postedAt     DateTime // 投稿された日時
+  externalId   String?  @unique // 追加：XのツイートID等、外部連携時の重複防止用
+  
+  // パフォーマンスデータ
+  impressions  Int      @default(0)
+  conversions  Int      @default(0)
+  
+  // 分析ステータス ("UNANALYZED", "POSITIVE", "NEGATIVE")
+  analysisStatus String @default("UNANALYZED")
+  
+  createdAt    DateTime @default(now())
+}
+
+// AIが分析して導き出したナレッジ（成功/失敗の法則）
+model Knowledge {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content      String   // 抽出された法則テキスト
+  type         String   // "BASE" or "WINNING" or "LOSING"
+  category     String?  // 追加：勝ち筋などの詳細分類（例: 共感系、ノウハウ系）
+  source       String?  // どの投稿から抽出したか等
+  isSharedToHQ Boolean  @default(false) // 追加：本部へ共有するかどうかのフラグ
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Post {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content      String   // 生成された投稿内容
+  platform     String   // "X" or "Instagram"
+  status       String   @default("DRAFT") // DRAFT, SCHEDULED, PUBLISHED
+  scheduledAt  DateTime? 
+  
+  mediaUrls              String?  // 画像等のメディアURL（JSON配列文字列）
+  postedTweetId          String?  // 実際に投稿されたXのポストID（インプ監視・リプライ用）
+  threadContents         String?  // [ツリー投稿] スレッドとしてぶら下げる投稿のJSON文字列配列
+  impressionTarget       Int?     // [インプ連動] 対象インプレッション数閾値（これを超えたらリプライ発動）
+  impressionReplyContent String?  // [インプ連動] インプレッション到達時にぶら下げるリプライ（URL等）
+  isImpressionReplySent  Boolean  @default(false) // [インプ連動] リプライ送信済みかどうかのフラグ
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// データ分析用KPIトラッキングシナリオ
+model KpiScenario {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String   // シナリオ名 (例: LPアクセス数、LINE登録数)
+  order        Int      // 任意の並び順
+  targetValue  Int      @default(0) // 目標数値
+  currentValue Int      @default(0) // 現在の実績数値
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 自動リプライキャンペーン管理用モデル
+model AutoReplyCampaign {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name         String   // キャンペーン名
+  targetUrl    String   // 対象ポストのURLまたはID
+  isTriggerRt    Boolean  @default(false) // RTをトリガーにするか
+  isTriggerLike  Boolean  @default(false) // いいねをトリガーにするか
+  isTriggerReply Boolean  @default(false) // 特定リプをトリガーにするか
+  keyword      String?  // isTriggerReplyがtrueの場合の特定キーワード
+  replyContent String   // 自動返信するテキスト内容
+  isActive     Boolean  @default(true) // キャンペーンが稼働中かどうか
+  
+  logs         AutoReplyLog[] // 送信履歴リレーション
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 自動リプライの送信履歴（二重送信防止用）
+model AutoReplyLog {
+  id           String   @id @default(cuid())
+  campaignId   String
+  campaign     AutoReplyCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  targetUserId String   // リプライを送信した相手のXユーザーID
+  triggerEvent String   // どの条件で発動したか ("RT", "LIKE", "REPLY")
+  
+  createdAt    DateTime @default(now())
+  
+  // 同一キャンペーンで同じユーザーに2回送らないためのユニーク制約
+  @@unique([campaignId, targetUserId])
+}
+
+// ユーザーがアップロード・生成したファイル（画像、動画、PDF等）を管理する
+model Media {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename  String   // オリジナルファイル名
+  url       String   // アクセス用URLパス (/uploads/...)
+  size      Int      // ファイルサイズ（バイト）
+  mimeType  String   // MIMEタイプ (image/jpeg, video/mp4 等)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
