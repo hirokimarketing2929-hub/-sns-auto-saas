@@ -1,16 +1,1 @@
-{
-    "crons": [
-        {
-            "path": "/api/cron/publish",
-            "schedule": "* * * * *"
-        },
-        {
-            "path": "/api/cron/autoreply",
-            "schedule": "* * * * *"
-        },
-        {
-            "path": "/api/cron/check-impressions",
-            "schedule": "*/5 * * * *"
-        }
-    ]
-}
+{}
