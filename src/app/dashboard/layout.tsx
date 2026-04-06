@@ -29,6 +29,18 @@ export default async function DashboardLayout({
     const settings = user.settings as any;
     const hasManualX = !!(settings?.xApiKey && settings?.xAccessToken);
 
+    // X連携が済んでいるが、権限（スコープ）が古くて不足している場合は再連携画面へ
+    const twitterAccount = linkedAccounts.find((acc: any) => acc.provider === "twitter");
+    if (twitterAccount && twitterAccount.scope) {
+        const requiredScopes = ["dm.write", "tweet.write", "offline.access"];
+        const grantedScopes = twitterAccount.scope.split(" ");
+        const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
+        
+        if (missingScopes.length > 0) {
+            redirect("/relink");
+        }
+    }
+
     return (
         <div className="min-h-screen flex bg-gray-50">
             {/* Sidebar */}
