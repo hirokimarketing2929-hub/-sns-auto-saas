@@ -51,7 +51,7 @@ export default function GeneratePreviewPage() {
 
                 if (kpiRes.ok) {
                     const kpiData = await kpiRes.json();
-                    if (!kpiData.message) setKpis(kpiData);
+                    if (!kpiData.message) setKpis(kpiData.scenarios || []);
                 }
 
             } catch (err) {

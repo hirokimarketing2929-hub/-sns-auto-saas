@@ -33,8 +33,8 @@ export const authOptions: NextAuthOptions = {
             authorization: {
                 params: {
                     // tweet.write: ツイート投稿権限
-                    // 将来の拡張分も一括取得 (dm.write, dm.read, space.read, block/mute, bookmark 等)
-                    scope: "users.read tweet.read tweet.write dm.read dm.write space.read mute.read mute.write block.read block.write bookmark.read bookmark.write offline.access",
+                    // dm.write, dm.read は無料枠でエラーになる可能性があるため一時削除
+                    scope: "users.read tweet.read tweet.write offline.access",
                 },
             },
             allowDangerousEmailAccountLinking: true,

@@ -272,41 +272,6 @@ export default function SettingsPage() {
                             <div className="space-y-4 pt-4 border-t mt-6">
                                 <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)</h3>
 
-                                <div className="bg-blue-50 p-4 rounded-md border border-blue-100 mt-4">
-                                    <h4 className="font-medium text-blue-900 mb-2">【本番用】SaaS連携 (OAuth 2.0)</h4>
-                                    <p className="text-sm text-blue-800 mb-3">
-                                        ユーザーにAPIキーの取得をさせず、SaaS運営側が費用負担する本格展開用の連携方法です。
-                                    </p>
-                                    
-                                    {hasTwitterOAuth ? (
-                                        <div className="flex flex-col gap-3 items-start border-t border-blue-200 pt-3">
-                                            <div className="flex items-center gap-2 text-green-700 font-semibold text-sm">
-                                                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                                                現在、X (Twitter) アカウントと連携中です。
-                                            </div>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8 text-xs"
-                                                onClick={handleDisconnectTwitter}
-                                            >
-                                                連携を解除する
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            className="bg-black text-white hover:bg-gray-800 border-0 flex items-center gap-2"
-                                            onClick={() => signIn("twitter")}
-                                        >
-                                            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
-                                                <g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 22.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.008 5.96H5.078z"></path></g>
-                                            </svg>
-                                            X (Twitter) アカウントを連携する
-                                        </Button>
-                                    )}
-                                </div>
 
                                 <div className="bg-gray-50 p-4 rounded-md border mt-6">
                                     <h4 className="font-medium text-gray-900 mb-2">【テスト用】個別APIキー設定 (BYOK)</h4>

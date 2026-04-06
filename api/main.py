@@ -19,7 +19,7 @@ app = FastAPI(title="ProX Agent API")
 # Next.jsからのCORS許可
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "https://sns-auto-saas.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
