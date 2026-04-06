@@ -99,8 +99,9 @@ export default async function DashboardLayout({
                     <a href="/dashboard/knowledge" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
                         ナレッジベース
                     </a>
-                    <a href="/dashboard/hq-knowledge" className="block px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md">
-                        🌟 本部共有ナレッジ
+                    <a href="https://docs.google.com/spreadsheets/" target="_blank" rel="noopener noreferrer" className="block px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md flex justify-between items-center">
+                        <span>🌟 本部共有ナレッジ</span>
+                        <span className="text-[10px] text-purple-400">🔗</span>
                     </a>
                     <a href="/dashboard/research" className="block px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md">
                         🔍 リサーチ・横展開

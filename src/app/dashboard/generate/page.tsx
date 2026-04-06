@@ -27,30 +27,30 @@ export default function GeneratePreviewPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [settingsRes, knowledgeRes, pastPostsRes, kpiRes] = await Promise.all([
-                    fetch("/api/settings"),
-                    fetch("/api/knowledge"),
-                    fetch("/api/past-posts"),
-                    fetch("/api/kpi")
-                ]);
-
-                if (settingsRes.ok) {
-                    const settingsData = await settingsRes.json();
+                // キャッシュ回避と、1つのAPIエラーが全体をブロックしないための個別fetch
+                const timestamp = Date.now();
+                
+                const settingsRes = await fetch(`/api/settings?t=${timestamp}`).catch(() => null);
+                if (settingsRes && settingsRes.ok) {
+                    const settingsData = await settingsRes.json().catch(() => ({}));
                     if (!settingsData.message) setUserSettings(settingsData);
                 }
 
-                if (knowledgeRes.ok) {
-                    const knowledgeData = await knowledgeRes.json();
+                const knowledgeRes = await fetch(`/api/knowledge?t=${timestamp}`).catch(() => null);
+                if (knowledgeRes && knowledgeRes.ok) {
+                    const knowledgeData = await knowledgeRes.json().catch(() => []);
                     setKnowledges(knowledgeData);
                 }
 
-                if (pastPostsRes.ok) {
-                    const pastPostsData = await pastPostsRes.json();
+                const pastPostsRes = await fetch(`/api/past-posts?t=${timestamp}`).catch(() => null);
+                if (pastPostsRes && pastPostsRes.ok) {
+                    const pastPostsData = await pastPostsRes.json().catch(() => []);
                     if (!pastPostsData.message) setPastPosts(pastPostsData);
                 }
 
-                if (kpiRes.ok) {
-                    const kpiData = await kpiRes.json();
+                const kpiRes = await fetch(`/api/kpi?t=${timestamp}`).catch(() => null);
+                if (kpiRes && kpiRes.ok) {
+                    const kpiData = await kpiRes.json().catch(() => ({}));
                     if (!kpiData.message) setKpis(kpiData.scenarios || []);
                 }
 
@@ -74,7 +74,7 @@ export default function GeneratePreviewPage() {
             const templateRules = knowledges.filter(k => k.type === "TEMPLATE").map(k => k.content);
 
             // DBから取得した設定とナレッジを使ってPython APIを叩く
-            const response = await fetch((process.env.NEXT_PUBLIC_AI_API_URL || "http://localhost:8000") + "/api/generate", {
+            const response = await fetch((process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/generate", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
