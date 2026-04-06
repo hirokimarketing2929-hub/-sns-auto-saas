@@ -95,8 +95,17 @@ export async function GET(req: Request) {
                     const randomizedReply = `${replyContent} \n[Ref:${Math.random().toString(36).substring(2, 8)}]`;
 
                     try {
-                        // 対象ユーザーに対して直接リプライを送る
-                        await twitterClient.v2.reply(randomizedReply, targetPostId);
+                        // 送信方式に応じて投稿方法を分岐
+                        if (campaign.replyType === "DM") {
+                            // DM送信（※要 dm.write 権限）
+                            await twitterClient.v2.sendDmToParticipant(targetUser.userId, { text: randomizedReply });
+                        } else if (campaign.replyType === "MENTION") {
+                            // 対象ツリーから独立した新規メンションとして送信
+                            await twitterClient.v2.tweet(`@${targetUser.username} ${randomizedReply}`);
+                        } else {
+                            // 通常リプライ（対象ツリーにぶら下げる）
+                            await twitterClient.v2.reply(randomizedReply, targetPostId);
+                        }
 
                         // 送信成功としてログに記録する（二重送信防止）
                         await db.autoReplyLog.create({

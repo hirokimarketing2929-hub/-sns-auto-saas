@@ -188,6 +188,7 @@ model AutoReplyCampaign {
   keyword      String?  // isTriggerReplyがtrueの場合の特定キーワード
   replyContent String   // 自動返信するテキスト内容
   isActive     Boolean  @default(true) // キャンペーンが稼働中かどうか
+  replyType    String   @default("REPLY") // 送信方式 ("REPLY", "MENTION", "DM")
   
   logs         AutoReplyLog[] // 送信履歴リレーション
   

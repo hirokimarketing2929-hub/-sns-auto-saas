@@ -14,6 +14,7 @@ interface AutoReplyCampaign {
     keyword: string | null;
     replyContent: string;
     isActive: boolean;
+    replyType: string;
     createdAt: string;
 }
 
@@ -29,6 +30,7 @@ export default function AutoReplyPage() {
     const [newIsTriggerReply, setNewIsTriggerReply] = useState(false);
     const [newKeyword, setNewKeyword] = useState("");
     const [newReplyContent, setNewReplyContent] = useState("");
+    const [newReplyType, setNewReplyType] = useState("MENTION");
 
     useEffect(() => {
         fetchCampaigns();
@@ -73,7 +75,8 @@ export default function AutoReplyPage() {
                         isTriggerLike: newIsTriggerLike,
                         isTriggerReply: newIsTriggerReply,
                         keyword: newKeyword,
-                        replyContent: newReplyContent
+                        replyContent: newReplyContent,
+                        replyType: newReplyType
                     }
                 })
             });
@@ -86,6 +89,7 @@ export default function AutoReplyPage() {
                 setNewIsTriggerReply(false);
                 setNewKeyword("");
                 setNewReplyContent("");
+                setNewReplyType("MENTION");
                 fetchCampaigns();
             }
         } catch (error) {
@@ -221,6 +225,33 @@ export default function AutoReplyPage() {
                         </div>
 
                         <div>
+                            <label className="text-sm font-medium text-gray-700 block mb-2">送信方式の選択</label>
+                            <div className="space-y-2">
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'REPLY' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                    <input type="radio" value="REPLY" checked={newReplyType === 'REPLY'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-blue-500" />
+                                    <div>
+                                        <span className="text-sm font-bold block text-gray-800">💬 通常リプライ</span>
+                                        <span className="text-xs text-gray-500 block">監視対象のポストのツリー上にそのまま公開リプライとしてぶら下げます。</span>
+                                    </div>
+                                </label>
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'MENTION' ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                    <input type="radio" value="MENTION" checked={newReplyType === 'MENTION'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-purple-500" />
+                                    <div>
+                                        <span className="text-sm font-bold block text-gray-800">🤫 シークレット（メンション）</span>
+                                        <span className="text-xs text-gray-500 block">対象のツリーには表示させず、相手の通知欄に直接届く独立ポストとして送信します。</span>
+                                    </div>
+                                </label>
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'DM' ? 'border-pink-300 bg-pink-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                    <input type="radio" value="DM" checked={newReplyType === 'DM'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-pink-500" />
+                                    <div>
+                                        <span className="text-sm font-bold block text-gray-800">✉️ シークレット（DM送信）</span>
+                                        <span className="text-xs text-gray-500 block">相手にDMとして送信します。※相手のDMが受信可能に設定されている必要があります。</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
                             <label className="text-sm font-medium text-gray-700 block mb-1">自動送信するリプライ（返信）内容</label>
                             <textarea
                                 value={newReplyContent}
@@ -280,6 +311,9 @@ export default function AutoReplyPage() {
                                             <span className="font-semibold text-gray-700">条件:</span>
                                             <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold border border-blue-100">
                                                 {renderTriggerLabels(campaign)}
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${campaign.replyType === 'DM' ? 'bg-pink-50 text-pink-700 border-pink-100' : campaign.replyType === 'MENTION' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                                                {campaign.replyType === 'DM' ? '✉️ DM' : campaign.replyType === 'MENTION' ? '🤫 メンション' : '💬 通常リプライ'}
                                             </span>
                                         </div>
                                     </div>

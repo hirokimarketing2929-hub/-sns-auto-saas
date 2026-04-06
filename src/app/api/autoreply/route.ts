@@ -41,7 +41,7 @@ export async function POST(req: Request) {
         const { action, payload } = await req.json();
 
         if (action === "create") {
-            const { name, targetUrl, isTriggerRt, isTriggerLike, isTriggerReply, keyword, replyContent } = payload;
+            const { name, targetUrl, isTriggerRt, isTriggerLike, isTriggerReply, keyword, replyContent, replyType } = payload;
 
             const newCampaign = await db.autoReplyCampaign.create({
                 data: {
@@ -53,7 +53,8 @@ export async function POST(req: Request) {
                     isTriggerReply: !!isTriggerReply,
                     keyword: isTriggerReply ? keyword : null, // 特定リプ判定がONのときだけ保存
                     replyContent,
-                    isActive: true
+                    isActive: true,
+                    replyType: replyType || "REPLY"
                 }
             });
             return NextResponse.json({ campaign: newCampaign });

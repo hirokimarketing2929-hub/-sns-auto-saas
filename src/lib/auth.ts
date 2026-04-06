@@ -33,8 +33,8 @@ export const authOptions: NextAuthOptions = {
             authorization: {
                 params: {
                     // tweet.write: ツイート投稿権限
-                    // offline.access: リフレッシュトークン取得権限（永続的アクセス用）
-                    scope: "users.read tweet.read tweet.write offline.access",
+                    // dm.write: DM送信権限 (シークレットリプライ用)
+                    scope: "users.read tweet.read tweet.write dm.write offline.access",
                 },
             },
             allowDangerousEmailAccountLinking: true,
