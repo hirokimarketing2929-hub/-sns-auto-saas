@@ -22,15 +22,15 @@ export async function POST(req: Request) {
             where: { userId: user.id }
         });
 
-        const positivePosts = pastPosts.filter(p => p.analysisStatus === "POSITIVE").map(p => p.content);
-        const negativePosts = pastPosts.filter(p => p.analysisStatus === "NEGATIVE").map(p => p.content);
+        const positivePosts = pastPosts.filter((p: { analysisStatus: string }) => p.analysisStatus === "POSITIVE").map((p: { content: string }) => p.content);
+        const negativePosts = pastPosts.filter((p: { analysisStatus: string }) => p.analysisStatus === "NEGATIVE").map((p: { content: string }) => p.content);
 
         if (positivePosts.length === 0 && negativePosts.length === 0) {
             return NextResponse.json({ message: "分析するデータがありません" }, { status: 400 });
         }
 
         // FastAPIサーバーへ分析リクエスト
-        const aiResponse = await fetch((process.env.NEXT_PUBLIC_AI_API_URL || "http://localhost:8000") + "/api/analyze_knowledge", {
+        const aiResponse = await fetch((process.env.AI_ENGINE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/analyze_knowledge", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
