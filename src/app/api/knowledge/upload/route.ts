@@ -34,7 +34,7 @@ export async function POST(req: Request) {
         });
 
         // AIエンジンの /api/parse_knowledge エンドポイントへそのまま転送する
-        const engineUrl = process.env.AI_ENGINE_URL || (process.env.NEXT_PUBLIC_AI_API_URL || "http://localhost:8000") + "";
+        const engineUrl = process.env.AI_ENGINE_URL || (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "";
         const response = await fetch(`${engineUrl}/api/parse_knowledge`, {
             method: "POST",
             body: pythonFormData,
