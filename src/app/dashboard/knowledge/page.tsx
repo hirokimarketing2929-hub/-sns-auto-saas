@@ -128,7 +128,7 @@ export default function KnowledgePage() {
             </div>
 
             {/* 手動登録フォーム (ユーザー独自ナレッジ) */}
-            <Card className="bg-white/50 border-gray-200 shadow-sm">
+            <Card className="bg-white/5 border-white/10 shadow-sm">
                 <CardHeader className="py-4">
                     <CardTitle className="text-lg flex items-center gap-2">
                         <span className="text-xl">✍️</span> ユーザー独自ナレッジを追加
@@ -165,7 +165,7 @@ export default function KnowledgePage() {
             </Card>
 
             {/* ファイルアップロード (マルチモーダル解析) */}
-            <Card className="bg-white/50 border-gray-200 shadow-sm mt-4">
+            <Card className="bg-white/5 border-white/10 shadow-sm mt-4">
                 <CardHeader className="py-4">
                     <CardTitle className="text-lg flex items-center gap-2">
                         <span className="text-xl">📁</span> ファイルからナレッジを抽出 (PDF, DOCX, 画像, MP4動画など)
@@ -176,7 +176,7 @@ export default function KnowledgePage() {
                 </CardHeader>
                 <CardContent>
                     <div className="mb-4 flex items-center gap-3">
-                        <label className="text-sm font-medium text-gray-700">格納先のナレッジ区分:</label>
+                        <label className="text-sm font-medium text-foreground/80">格納先のナレッジ区分:</label>
                         <select
                             value={uploadCategory}
                             onChange={(e) => setUploadCategory(e.target.value)}
@@ -191,7 +191,7 @@ export default function KnowledgePage() {
                         </select>
                     </div>
 
-                    <div className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors relative ${isUploading ? "border-indigo-300 bg-indigo-50" : "border-gray-300 hover:bg-gray-50"}`}>
+                    <div className={`border-2 border-dashed rounded-lg p-10 text-center transition-colors relative ${isUploading ? "border-purple-500/50 bg-purple-500/10" : "border-white/20 hover:bg-white/5"}`}>
                         <input
                             type="file"
                             multiple
@@ -202,13 +202,13 @@ export default function KnowledgePage() {
                         />
                         <div className="pointer-events-none">
                             <span className="text-4xl block mb-2">📥</span>
-                            <p className="text-sm text-gray-600 font-medium">クリック、またはファイルをここにドロップしてアップロード</p>
-                            <p className="text-xs text-gray-400 mt-1">対応形式: PDF, DOCX, PPTX, 画像(JPG/PNG), 動画(MP4)</p>
+                            <p className="text-sm text-foreground/80 font-medium">クリック、またはファイルをここにドロップしてアップロード</p>
+                            <p className="text-xs text-muted-foreground mt-1">対応形式: PDF, DOCX, PPTX, 画像(JPG/PNG), 動画(MP4)</p>
                         </div>
                     </div>
                     {isUploading && (
-                        <div className="mt-4 text-sm text-indigo-600 flex items-center justify-center gap-2">
-                            <span className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full px-2 py-2"></span>
+                        <div className="mt-4 text-sm text-purple-400 flex items-center justify-center gap-2">
+                            <span className="animate-spin h-4 w-4 border-2 border-purple-400 border-t-transparent rounded-full px-2 py-2"></span>
                             ファイルをAIが解析中です... (動画などの場合は数分〜数十分かかる場合があります)
                         </div>
                     )}
@@ -220,36 +220,36 @@ export default function KnowledgePage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
                     {/* ベースナレッジ */}
-                    <Card className="border-indigo-200">
-                        <CardHeader className="bg-indigo-50 rounded-t-lg pb-4">
+                    <Card className="border-purple-500/30">
+                        <CardHeader className="bg-purple-500/10 rounded-t-lg pb-4">
                             <div className="flex justify-between items-center">
-                                <CardTitle className="text-indigo-800 text-lg">📚 ベースナレッジ</CardTitle>
-                                <Badge variant="outline" className="bg-indigo-100 text-indigo-800 border-indigo-300">
+                                <CardTitle className="text-purple-400 text-lg">📚 ベースナレッジ</CardTitle>
+                                <Badge variant="outline" className="bg-purple-500/20 text-purple-300 border-purple-500/30">
                                     {baseRules.length} 件
                                 </Badge>
                             </div>
-                            <CardDescription className="text-indigo-600 text-xs mt-1">
+                            <CardDescription className="text-purple-300/70 text-xs mt-1">
                                 アカウントの土台となる構造化ルール
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="pt-6 space-y-4">
-                            {baseRules.length === 0 ? <p className="text-sm text-gray-500 text-center py-4">データがありません</p> : null}
+                            {baseRules.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">データがありません</p> : null}
                             <ul className="space-y-3">
                                 {baseRules.map((rule: any, idx: number) => (
-                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white border rounded-md shadow-sm">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">
+                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white/5 border border-white/10 rounded-md shadow-sm">
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-500/30 text-purple-300 flex items-center justify-center font-bold text-sm">
                                             {idx + 1}
                                         </span>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 {rule.category && (
-                                                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 h-5 px-1.5">
+                                                    <Badge variant="outline" className="text-[10px] text-muted-foreground bg-white/5 border-white/10 h-5 px-1.5">
                                                         🏷️ {rule.category}
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-gray-800 text-sm font-medium">{rule.content}</p>
-                                            <p className="text-xs text-gray-400 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
+                                            <p className="text-foreground/80 text-sm font-medium">{rule.content}</p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
                                         </div>
                                     </li>
                                 ))}
@@ -258,36 +258,36 @@ export default function KnowledgePage() {
                     </Card>
 
                     {/* 投稿の型 (Template) */}
-                    <Card className="border-emerald-200">
-                        <CardHeader className="bg-emerald-50 rounded-t-lg pb-4">
+                    <Card className="border-emerald-500/30">
+                        <CardHeader className="bg-emerald-500/10 rounded-t-lg pb-4">
                             <div className="flex justify-between items-center">
-                                <CardTitle className="text-emerald-800 text-lg">📝 投稿の型</CardTitle>
-                                <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300">
+                                <CardTitle className="text-emerald-400 text-lg">📝 投稿の型</CardTitle>
+                                <Badge variant="outline" className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
                                     {templateRules.length} 件
                                 </Badge>
                             </div>
-                            <CardDescription className="text-emerald-600 text-xs mt-1">
+                            <CardDescription className="text-emerald-300/70 text-xs mt-1">
                                 投稿の構成やフォーマット（テンプレート）
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="pt-6 space-y-4">
-                            {templateRules.length === 0 ? <p className="text-sm text-gray-500 text-center py-4">データがありません</p> : null}
+                            {templateRules.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">データがありません</p> : null}
                             <ul className="space-y-3">
                                 {templateRules.map((rule: any, idx: number) => (
-                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white border rounded-md shadow-sm">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white/5 border border-white/10 rounded-md shadow-sm">
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-500/30 text-emerald-300 flex items-center justify-center font-bold text-sm">
                                             {idx + 1}
                                         </span>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 {rule.category && (
-                                                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 h-5 px-1.5">
+                                                    <Badge variant="outline" className="text-[10px] text-muted-foreground bg-white/5 border-white/10 h-5 px-1.5">
                                                         🏷️ {rule.category}
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-gray-800 text-sm font-medium">{rule.content}</p>
-                                            <p className="text-xs text-gray-400 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
+                                            <p className="text-foreground/80 text-sm font-medium">{rule.content}</p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
                                         </div>
                                     </li>
                                 ))}
@@ -296,36 +296,36 @@ export default function KnowledgePage() {
                     </Card>
 
                     {/* 勝ちパターン */}
-                    <Card className="border-blue-200">
-                        <CardHeader className="bg-blue-50 rounded-t-lg pb-4">
+                    <Card className="border-blue-500/30">
+                        <CardHeader className="bg-blue-500/10 rounded-t-lg pb-4">
                             <div className="flex justify-between items-center">
-                                <CardTitle className="text-blue-800 text-lg">🌟 勝ちパターン</CardTitle>
-                                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                                <CardTitle className="text-blue-400 text-lg">🌟 勝ちパターン</CardTitle>
+                                <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-500/30">
                                     {winningRules.length} 件
                                 </Badge>
                             </div>
-                            <CardDescription className="text-blue-600 text-xs mt-1">
+                            <CardDescription className="text-blue-300/70 text-xs mt-1">
                                 投稿生成時に「必ず含める」成功ルール
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="pt-6 space-y-4">
-                            {winningRules.length === 0 ? <p className="text-sm text-gray-500 text-center py-4">抽出されたルールがありません</p> : null}
+                            {winningRules.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">抽出されたルールがありません</p> : null}
                             <ul className="space-y-3">
                                 {winningRules.map((rule: any, idx: number) => (
-                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white border rounded-md shadow-sm">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white/5 border border-white/10 rounded-md shadow-sm">
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/30 text-blue-300 flex items-center justify-center font-bold text-sm">
                                             {idx + 1}
                                         </span>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 {rule.category && (
-                                                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 h-5 px-1.5">
+                                                    <Badge variant="outline" className="text-[10px] text-muted-foreground bg-white/5 border-white/10 h-5 px-1.5">
                                                         🏷️ {rule.category}
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-gray-800 text-sm font-medium">{rule.content}</p>
-                                            <p className="text-xs text-gray-400 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
+                                            <p className="text-foreground/80 text-sm font-medium">{rule.content}</p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
                                         </div>
                                     </li>
                                 ))}
@@ -334,36 +334,36 @@ export default function KnowledgePage() {
                     </Card>
 
                     {/* ネガティブルール */}
-                    <Card className="border-red-200">
-                        <CardHeader className="bg-red-50 rounded-t-lg pb-4">
+                    <Card className="border-red-500/30">
+                        <CardHeader className="bg-red-500/10 rounded-t-lg pb-4">
                             <div className="flex justify-between items-center">
-                                <CardTitle className="text-red-800 text-lg">🚫 負けパターン</CardTitle>
-                                <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+                                <CardTitle className="text-red-400 text-lg">🚫 負けパターン</CardTitle>
+                                <Badge variant="outline" className="bg-red-500/20 text-red-300 border-red-500/30">
                                     {losingRules.length} 件
                                 </Badge>
                             </div>
-                            <CardDescription className="text-red-600 text-xs mt-1">
+                            <CardDescription className="text-red-300/70 text-xs mt-1">
                                 投稿生成時に「絶対に避ける」禁止ルール
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="pt-6 space-y-4">
-                            {losingRules.length === 0 ? <p className="text-sm text-gray-500 text-center py-4">抽出されたルールがありません</p> : null}
+                            {losingRules.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">抽出されたルールがありません</p> : null}
                             <ul className="space-y-3">
                                 {losingRules.map((rule: any, idx: number) => (
-                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white border rounded-md shadow-sm">
-                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">
+                                    <li key={rule.id} className="flex gap-3 items-start p-3 bg-white/5 border border-white/10 rounded-md shadow-sm">
+                                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-red-500/30 text-red-300 flex items-center justify-center font-bold text-sm">
                                             {idx + 1}
                                         </span>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2 mb-1">
                                                 {rule.category && (
-                                                    <Badge variant="outline" className="text-[10px] text-gray-600 bg-gray-50 h-5 px-1.5">
+                                                    <Badge variant="outline" className="text-[10px] text-muted-foreground bg-white/5 border-white/10 h-5 px-1.5">
                                                         🏷️ {rule.category}
                                                     </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-gray-800 text-sm font-medium">{rule.content}</p>
-                                            <p className="text-xs text-gray-400 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
+                                            <p className="text-foreground/80 text-sm font-medium">{rule.content}</p>
+                                            <p className="text-xs text-muted-foreground/60 mt-1">抽出元: {rule.source} / {new Date(rule.createdAt).toLocaleDateString()}</p>
                                         </div>
                                     </li>
                                 ))}

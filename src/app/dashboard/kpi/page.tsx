@@ -137,7 +137,7 @@ export default function KpiDashboardPage() {
                     </p>
                 </div>
                 <div>
-                    <Button onClick={handleGasSyncPrompt} variant="outline" className="border-green-500 text-green-700 bg-green-50 hover:bg-green-100">
+                    <Button onClick={handleGasSyncPrompt} variant="outline" className="border-emerald-500/50 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20">
                         🔗 スプレッドシート/GAS 連携設定
                     </Button>
                 </div>
@@ -157,25 +157,25 @@ export default function KpiDashboardPage() {
                             <Card className="h-full border-t-4 border-t-blue-500 shadow-sm relative overflow-hidden group">
                                 <CardHeader className="pb-2">
                                     <div className="flex justify-between items-center">
-                                        <CardTitle className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
+                                        <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                                             Step {index + 1}
                                         </CardTitle>
-                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex bg-white/90 rounded shadow-sm border text-xs">
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex bg-white/10 rounded shadow-sm border border-white/20 text-xs">
                                             <button onClick={() => handleMoveUp(index)} disabled={index === 0} className="p-1 hover:bg-gray-100 disabled:opacity-30">◀</button>
                                             <button onClick={() => handleDeleteScenario(scenario.id)} className="p-1 hover:bg-red-50 text-red-500">×</button>
                                             <button onClick={() => handleMoveDown(index)} disabled={index === scenarios.length - 1} className="p-1 hover:bg-gray-100 disabled:opacity-30">▶</button>
                                         </div>
                                     </div>
-                                    <h3 className="text-lg font-bold mt-1 text-gray-900 line-clamp-2 leading-tight h-10">{scenario.name}</h3>
+                                    <h3 className="text-lg font-bold mt-1 text-foreground line-clamp-2 leading-tight h-10">{scenario.name}</h3>
                                 </CardHeader>
                                 <CardContent>
                                     <div className="flex items-baseline gap-2">
-                                        <span className="text-3xl font-black text-blue-600">{scenario.currentValue}</span>
-                                        <span className="text-sm font-medium text-gray-400">/ {scenario.targetValue} 目標</span>
+                                        <span className="text-3xl font-black text-blue-400">{scenario.currentValue}</span>
+                                        <span className="text-sm font-medium text-muted-foreground">/ {scenario.targetValue} 目標</span>
                                     </div>
 
                                     {/* 達成率プログレスバー */}
-                                    <div className="mt-4 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="mt-4 h-2 w-full bg-white/10 rounded-full overflow-hidden">
                                         <div
                                             className="h-full bg-blue-500"
                                             style={{ width: `${Math.min(100, (scenario.currentValue / (scenario.targetValue || 1)) * 100)}%` }}
@@ -184,7 +184,7 @@ export default function KpiDashboardPage() {
 
                                     {/* コンバージョン率 (歩留まり) */}
                                     {conversionRate !== null && (
-                                        <div className="absolute -left-3 top-1/2 -translate-y-1/2 bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded-r-md shadow-sm z-10 hidden md:block">
+                                        <div className="absolute -left-3 top-1/2 -translate-y-1/2 bg-purple-500 text-white text-[10px] font-bold px-2 py-1 rounded-r-md shadow-sm z-10 hidden md:block">
                                             ◀ {conversionRate}%
                                         </div>
                                     )}
@@ -193,7 +193,7 @@ export default function KpiDashboardPage() {
 
                             {/* モバイルレイアウト用の下矢印（遷移率） */}
                             {conversionRate !== null && (
-                                <div className="md:hidden flex justify-center my-2 text-indigo-600 font-bold text-sm">
+                                <div className="md:hidden flex justify-center my-2 text-purple-400 font-bold text-sm">
                                     ▼ {conversionRate}% 遷移
                                 </div>
                             )}
@@ -203,31 +203,31 @@ export default function KpiDashboardPage() {
             </div>
 
             {/* 新規シナリオ追加フォーム */}
-            <Card className="bg-gray-50/50 border-dashed border-2">
+            <Card className="bg-white/5 border-dashed border-2 border-white/20">
                 <CardHeader className="py-4">
                     <CardTitle className="text-lg">＋ 新しいトラッキング項目(シナリオ)を追加する</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleAddScenario} className="flex gap-4 items-end flex-wrap">
                         <div className="flex-1 min-w-[200px]">
-                            <label className="text-xs font-medium text-gray-500 mb-1 block">項目名 (例: LINE友だち追加数)</label>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">項目名 (例: LINE友だち追加数)</label>
                             <input
                                 type="text"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
                                 placeholder="LP訪問数、予約完了数 など"
-                                className="w-full h-10 border border-input bg-white px-3 py-2 text-sm rounded-md"
+                                className="w-full h-10 border border-white/10 bg-white/5 px-3 py-2 text-sm rounded-md text-foreground"
                                 required
                             />
                         </div>
                         <div className="w-[150px]">
-                            <label className="text-xs font-medium text-gray-500 mb-1 block">目標数値 (任意)</label>
+                            <label className="text-xs font-medium text-muted-foreground mb-1 block">目標数値 (任意)</label>
                             <input
                                 type="number"
                                 value={newTarget}
                                 onChange={(e) => setNewTarget(e.target.value)}
                                 placeholder="例: 100"
-                                className="w-full h-10 border border-input bg-white px-3 py-2 text-sm rounded-md"
+                                className="w-full h-10 border border-white/10 bg-white/5 px-3 py-2 text-sm rounded-md text-foreground"
                             />
                         </div>
                         <Button type="submit" disabled={!newName.trim()} className="mb-0">

@@ -13,7 +13,7 @@ export default function ProlineIntegrationPage() {
                     公式推奨連携ツール
                 </Badge>
                 <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-gray-900 leading-tight">
-                    ProX Agent の真の力を引き出す<br />
+                    ProX の真の力を引き出す<br />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-500">
                         「プロラインフリー」連携
                     </span>
@@ -40,7 +40,7 @@ export default function ProlineIntegrationPage() {
                             </li>
                             <li className="flex items-start gap-3">
                                 <span className="bg-emerald-500/20 text-emerald-400 p-1 rounded-full text-sm">✅</span>
-                                <span className="text-gray-200">ProX Agentが集めたフォロワーを自動で教育・販売</span>
+                                <span className="text-gray-200">ProX が集めたフォロワーを自動で教育・販売</span>
                             </li>
                             <li className="flex items-start gap-3">
                                 <span className="bg-emerald-500/20 text-emerald-400 p-1 rounded-full text-sm">✅</span>
@@ -71,7 +71,7 @@ export default function ProlineIntegrationPage() {
                             </div>
                             <h4 className="font-bold text-gray-900">1. AIによる全自動集客</h4>
                             <p className="text-sm text-gray-500 leading-relaxed">
-                                ProX AgentがX（Twitter）やInstagramで最適な投稿を自動生成・自動投稿し、あなたのアカウントに多くの見込み客を集めます。
+                                ProX がX（Twitter）やInstagramで最適な投稿を自動生成・自動投稿し、あなたのアカウントに多くの見込み客を集めます。
                             </p>
                         </CardContent>
                     </Card>
@@ -106,7 +106,7 @@ export default function ProlineIntegrationPage() {
             <div className="text-center mt-12 bg-gray-50 rounded-2xl p-8 border border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-2">すでにアカウントをお持ちの方</h3>
                 <p className="text-gray-600 text-sm mb-6">
-                    引き続きProX Agentの自動投稿機能にて、「CTA」に自身のプロラインURLを設定してご活用ください。
+                    引き続きProX の自動投稿機能にて、「CTA」に自身のプロラインURLを設定してご活用ください。
                 </p>
                 <div className="flex justify-center gap-4">
                     <Button variant="outline" onClick={() => window.location.href = '/dashboard/settings'}>

@@ -7,14 +7,24 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+
+type TwitterAccount = {
+    id: string;
+    provider: string;
+    providerAccountId: string;
+    accountName: string | null;
+    scope: string | null;
+};
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [hasTwitterOAuth, setHasTwitterOAuth] = useState(false);
+    const [twitterAccounts, setTwitterAccounts] = useState<TwitterAccount[]>([]);
     const [message, setMessage] = useState({ text: "", type: "" });
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     const [formData, setFormData] = useState({
         targetAudience: "",
@@ -37,6 +47,15 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchSettings();
     }, []);
+
+    // OAuth リダイレクト後のクエリメッセージ
+    useEffect(() => {
+        if (searchParams.get("linked") === "1") {
+            setMessage({ text: "X アカウントを連携しました。", type: "success" });
+        } else if (searchParams.get("error") === "account_in_use") {
+            setMessage({ text: "この X アカウントは既に別のユーザーに連携されています。", type: "error" });
+        }
+    }, [searchParams]);
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -62,6 +81,7 @@ export default function SettingsPage() {
                     spreadsheetUrl: data.spreadsheetUrl || "",
                 });
                 setHasTwitterOAuth(!!data.hasTwitterOAuth);
+                setTwitterAccounts(Array.isArray(data.twitterAccounts) ? data.twitterAccounts : []);
             }
         } catch (error) {
             console.error("Failed to fetch settings:", error);
@@ -106,14 +126,20 @@ export default function SettingsPage() {
         }
     };
 
-    const handleDisconnectTwitter = async () => {
-        if (!confirm("本当にX (Twitter) の連携を解除しますか？ 自動投稿ができなくなります。")) return;
+    const handleDisconnectTwitter = async (accountId?: string) => {
+        const msg = accountId
+            ? "このX アカウントの連携を解除しますか？"
+            : "本当にX (Twitter) の連携を全て解除しますか？ 自動投稿ができなくなります。";
+        if (!confirm(msg)) return;
 
         try {
-            const res = await fetch("/api/auth/disconnect/twitter", { method: "DELETE" });
+            const url = accountId
+                ? `/api/auth/disconnect/twitter?accountId=${encodeURIComponent(accountId)}`
+                : "/api/auth/disconnect/twitter";
+            const res = await fetch(url, { method: "DELETE" });
             if (res.ok) {
                 setMessage({ text: "X (Twitter) アカウントの連携を解除しました。", type: "success" });
-                setHasTwitterOAuth(false);
+                await fetchSettings();
                 router.refresh();
             } else {
                 setMessage({ text: "解除に失敗しました。", type: "error" });
@@ -123,12 +149,19 @@ export default function SettingsPage() {
         }
     };
 
+    const handleLinkNewTwitter = () => {
+        // 既存セッションを維持したまま 2 つ目以降の X アカウントを連携する。
+        // auth.ts の signIn コールバックが現セッションのユーザーに Account を upsert し、
+        // callbackUrl へリダイレクトする。
+        signIn("twitter", { callbackUrl: "/dashboard/settings?linked=1" });
+    };
+
     return (
         <div className="space-y-6 max-w-4xl">
             <div>
                 <h2 className="text-3xl font-bold tracking-tight">設定・ペルソナ登録</h2>
                 <p className="text-muted-foreground mt-2">
-                    AIエージェントが投稿を生成する際の「あなたのアカウント専用のルールやペルソナ」を設定します。
+                    AIが投稿を生成する際の「あなたのアカウント専用のルールやペルソナ」を設定します。
                 </p>
             </div>
 
@@ -158,6 +191,42 @@ export default function SettingsPage() {
                             空欄のまま下の「システム連携設定」でAPIキーを保存すると、Xの表示名(@ユーザー名)とアイコン画像が自動で取得・表示されます。
                         </p>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* X (Twitter) アカウント連携 */}
+            <Card id="x-accounts" className="border-sky-200 shadow-sm">
+                <CardHeader>
+                    <CardTitle className="text-xl">X (Twitter) アカウント連携</CardTitle>
+                    <CardDescription>
+                        複数のXアカウントを連携できます。ログイン中のままOAuthで追加してください。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {twitterAccounts.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">連携済みのXアカウントはありません。</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {twitterAccounts.map((acc) => (
+                                <li key={acc.id} className="flex items-center justify-between border rounded-md px-4 py-2 bg-white">
+                                    <div className="flex flex-col">
+                                        <span className="font-medium">{acc.accountName || `𝕏 (${acc.providerAccountId})`}</span>
+                                        <span className="text-xs text-muted-foreground truncate max-w-[480px]">scope: {acc.scope || "-"}</span>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => handleDisconnectTwitter(acc.id)}
+                                    >
+                                        解除
+                                    </Button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    <Button type="button" onClick={handleLinkNewTwitter} className="w-full md:w-auto">
+                        + Xアカウントを連携する
+                    </Button>
                 </CardContent>
             </Card>
 

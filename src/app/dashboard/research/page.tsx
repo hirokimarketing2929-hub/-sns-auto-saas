@@ -136,7 +136,7 @@ export default function ResearchPage() {
             </div>
 
             {/* Custom Tabs Navigation */}
-            <div className="flex overflow-x-auto space-x-1 border-b border-gray-200 dark:border-gray-800 pb-1">
+            <div className="flex overflow-x-auto space-x-1 border-b border-white/10 dark:border-gray-800 pb-1">
                 {[
                     { id: "ai", label: "🤖 AIおまかせ提案", icon: Sparkles },
                     { id: "hq", label: "🌟 本部ナレッジ引用", icon: Database },
@@ -148,10 +148,10 @@ export default function ResearchPage() {
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 rounded-t-xl
                             ${activeTab === tab.id 
-                                ? "border-blue-600 text-blue-700 bg-blue-50/50 dark:text-blue-400 dark:border-blue-500" 
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                                ? "border-blue-600 text-blue-700 bg-blue-50/50 dark:text-blue-400 dark:border-blue-500"
+                                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/5 dark:hover:bg-gray-800"}`}
                     >
-                        <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? "text-blue-600 dark:text-blue-400" : "text-gray-400"}`} />
+                        <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/60"}`} />
                         {tab.label}
                     </button>
                 ))}
@@ -220,14 +220,14 @@ export default function ResearchPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         {hqSuggestions.map(s => (
-                                            <div key={s.id} className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-100 shadow-sm hover:border-purple-300 transition-colors">
+                                            <div key={s.id} className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-purple-100 dark:border-purple-900/30 shadow-sm hover:border-purple-300 dark:hover:border-purple-800 transition-colors">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <Badge variant="secondary" className="bg-purple-100 text-purple-800">{s.category}</Badge>
                                                     <Button size="sm" variant="default" className="bg-purple-600 hover:bg-purple-700" disabled={isGenerating} onClick={() => handleHqRepurpose(s)}>
                                                         {isGenerating ? "適用中..." : "この型を使う"}
                                                     </Button>
                                                 </div>
-                                                <p className="text-sm mt-2 line-clamp-2 text-gray-700 dark:text-gray-300">{s.content}</p>
+                                                <p className="text-sm mt-2 line-clamp-2 text-foreground/80 dark:text-gray-300">{s.content}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -274,10 +274,10 @@ export default function ResearchPage() {
                     )}
 
                     {activeTab === "manual" && (
-                        <Card className="border-gray-200 shadow-sm bg-gray-50/50 dark:bg-gray-900/10">
+                        <Card className="border-white/10 shadow-sm bg-white/5 dark:bg-gray-900/10">
                             <CardHeader>
                                 <CardTitle className="text-xl flex items-center gap-2">
-                                    <Search className="w-5 h-5 text-gray-500" />
+                                    <Search className="w-5 h-5 text-muted-foreground" />
                                     手動リサーチ・横展開
                                 </CardTitle>
                                 <CardDescription>
@@ -325,8 +325,8 @@ export default function ResearchPage() {
 
                     {!isGenerating && !result && (
                         <div className="h-[400px] flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 text-center text-muted-foreground bg-white/50 dark:bg-slate-900/50">
-                            <Sparkles className="h-16 w-16 mb-4 text-gray-300 dark:text-gray-700" />
-                            <p className="text-lg font-medium text-gray-400">結果待機中...</p>
+                            <Sparkles className="h-16 w-16 mb-4 text-muted-foreground/40 dark:text-gray-700" />
+                            <p className="text-lg font-medium text-muted-foreground">結果待機中...</p>
                             <p className="text-sm mt-2 max-w-sm">左側のエリアからリサーチ方法を選び、実行させるとここに生成された投稿案が表示されます。</p>
                         </div>
                     )}
@@ -344,7 +344,7 @@ export default function ResearchPage() {
                                 <CardContent className="pt-4 space-y-4">
                                     <div>
                                         <h4 className="text-sm font-bold text-muted-foreground mb-1">📝 適用した 「型（骨組み）」</h4>
-                                        <p className="text-sm leading-relaxed p-3 bg-slate-50 dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium">
+                                        <p className="text-sm leading-relaxed p-3 bg-white/5 dark:bg-slate-800 rounded-md border border-white/10 dark:border-slate-700 text-foreground/80 dark:text-slate-300 font-medium">
                                             {result.extracted_format}
                                         </p>
                                     </div>
@@ -366,9 +366,9 @@ export default function ResearchPage() {
                                 
                                 <div className="space-y-4">
                                     {result.generated_posts.map((post, index) => (
-                                        <Card key={index} className="overflow-hidden border-gray-200 hover:border-gray-300 transition-colors shadow-sm">
-                                            <div className="bg-gray-50 dark:bg-gray-800/50 px-4 py-2 border-b flex justify-between items-center">
-                                                <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                        <Card key={index} className="overflow-hidden border-white/10 hover:border-white/20 transition-colors shadow-sm">
+                                            <div className="bg-white/5 dark:bg-gray-800/50 px-4 py-2 border-b border-white/10 flex justify-between items-center">
+                                                <span className="text-sm font-bold text-foreground/80 dark:text-gray-300">
                                                     生成ポスト案 {index + 1}
                                                 </span>
                                                 <Button 

@@ -159,7 +159,7 @@ export default function AutoReplyPage() {
             </div>
 
             {/* 新規キャンペーン作成フォーム */}
-            <Card className="bg-white/80 border-blue-200 shadow-sm border-t-4 border-t-blue-500">
+            <Card className="bg-white/5 border-blue-500/30 shadow-sm border-t-4 border-t-blue-500">
                 <CardHeader>
                     <CardTitle className="text-lg">＋ 新しい自動リプライキャンペーンを作成</CardTitle>
                 </CardHeader>
@@ -167,7 +167,7 @@ export default function AutoReplyPage() {
                     <form onSubmit={handleCreateCampaign} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">キャンペーン管理名</label>
+                                <label className="text-sm font-medium text-foreground/80 block mb-1">キャンペーン管理名</label>
                                 <input
                                     type="text"
                                     value={newName}
@@ -178,7 +178,7 @@ export default function AutoReplyPage() {
                                 />
                             </div>
                             <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-1">監視対象のポストURL（またはポストID）</label>
+                                <label className="text-sm font-medium text-foreground/80 block mb-1">監視対象のポストURL（またはポストID）</label>
                                 <input
                                     type="text"
                                     value={newTargetUrl}
@@ -192,7 +192,7 @@ export default function AutoReplyPage() {
 
                         <div className="grid grid-cols-1 gap-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-700 block mb-2">発動トリガー（複数選択可）</label>
+                                <label className="text-sm font-medium text-foreground/80 block mb-2">発動トリガー（複数選択可）</label>
                                 <div className="flex flex-wrap gap-4">
                                     <label className="flex items-center gap-2 cursor-pointer">
                                         <input type="checkbox" checked={newIsTriggerRt} onChange={(e) => setNewIsTriggerRt(e.target.checked)} className="rounded text-blue-600 w-4 h-4" />
@@ -211,7 +211,7 @@ export default function AutoReplyPage() {
 
                             {newIsTriggerReply && (
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700 block mb-1">反応するキーワード (リプライ指定時)</label>
+                                    <label className="text-sm font-medium text-foreground/80 block mb-1">反応するキーワード (リプライ指定時)</label>
                                     <input
                                         type="text"
                                         value={newKeyword}
@@ -225,34 +225,34 @@ export default function AutoReplyPage() {
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-2">送信方式の選択</label>
+                            <label className="text-sm font-medium text-foreground/80 block mb-2">送信方式の選択</label>
                             <div className="space-y-2">
-                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'REPLY' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'REPLY' ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/10 hover:bg-white/5'}`}>
                                     <input type="radio" value="REPLY" checked={newReplyType === 'REPLY'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-blue-500" />
                                     <div>
-                                        <span className="text-sm font-bold block text-gray-800">💬 通常リプライ</span>
-                                        <span className="text-xs text-gray-500 block">監視対象のポストのツリー上にそのまま公開リプライとしてぶら下げます。</span>
+                                        <span className="text-sm font-bold block text-foreground">💬 通常リプライ</span>
+                                        <span className="text-xs text-muted-foreground block">監視対象のポストのツリー上にそのまま公開リプライとしてぶら下げます。</span>
                                     </div>
                                 </label>
-                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'MENTION' ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'MENTION' ? 'border-purple-500/50 bg-purple-500/10' : 'border-white/10 hover:bg-white/5'}`}>
                                     <input type="radio" value="MENTION" checked={newReplyType === 'MENTION'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-purple-500" />
                                     <div>
-                                        <span className="text-sm font-bold block text-gray-800">🤫 シークレット（メンション）</span>
-                                        <span className="text-xs text-gray-500 block">対象のツリーには表示させず、相手の通知欄に直接届く独立ポストとして送信します。</span>
+                                        <span className="text-sm font-bold block text-foreground">🤫 シークレット（メンション）</span>
+                                        <span className="text-xs text-muted-foreground block">対象のツリーには表示させず、相手の通知欄に直接届く独立ポストとして送信します。</span>
                                     </div>
                                 </label>
-                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'DM' ? 'border-pink-300 bg-pink-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'DM' ? 'border-pink-500/50 bg-pink-500/10' : 'border-white/10 hover:bg-white/5'}`}>
                                     <input type="radio" value="DM" checked={newReplyType === 'DM'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-pink-500" />
                                     <div>
-                                        <span className="text-sm font-bold block text-gray-800">✉️ シークレット（DM送信）</span>
-                                        <span className="text-xs text-gray-500 block">相手にDMとして送信します。※相手のDMが受信可能に設定されている必要があります。</span>
+                                        <span className="text-sm font-bold block text-foreground">✉️ シークレット（DM送信）</span>
+                                        <span className="text-xs text-muted-foreground block">相手にDMとして送信します。※相手のDMが受信可能に設定されている必要があります。</span>
                                     </div>
                                 </label>
                             </div>
                         </div>
 
                         <div>
-                            <label className="text-sm font-medium text-gray-700 block mb-1">自動送信するリプライ（返信）内容</label>
+                            <label className="text-sm font-medium text-foreground/80 block mb-1">自動送信するリプライ（返信）内容</label>
                             <textarea
                                 value={newReplyContent}
                                 onChange={(e) => setNewReplyContent(e.target.value)}
@@ -261,7 +261,7 @@ export default function AutoReplyPage() {
                                 className="w-full min-h-[5rem] border border-input bg-background px-3 py-2 text-sm rounded-md resize-y"
                                 required
                             />
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-muted-foreground mt-1">
                                 ※スパム判定を避けるため、実際の送信時はシステムのAIが文末などにランダムな絵文字や微小な揺らぎを自動付与して送信します。
                             </p>
                         </div>
@@ -289,7 +289,7 @@ export default function AutoReplyPage() {
                 <h3 className="text-xl font-bold">稼働中・過去のキャンペーン一覧</h3>
 
                 {campaigns.length === 0 ? (
-                    <div className="text-center py-10 text-gray-500 border rounded-lg bg-gray-50">
+                    <div className="text-center py-10 text-muted-foreground border border-white/10 rounded-lg bg-white/5">
                         設定されている自動リプライキャンペーンはありません。
                     </div>
                 ) : (
@@ -299,27 +299,27 @@ export default function AutoReplyPage() {
                                 <CardContent className="p-5 flex flex-col md:flex-row gap-6 justify-between items-start md:items-center">
                                     <div className="flex-1 space-y-2">
                                         <div className="flex items-center gap-2">
-                                            <h4 className="font-bold text-lg">{campaign.name}</h4>
-                                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${campaign.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                            <h4 className="font-bold text-lg text-foreground">{campaign.name}</h4>
+                                            <span className={`text-xs px-2 py-1 rounded-full font-bold ${campaign.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-muted-foreground'}`}>
                                                 {campaign.isActive ? '🟢 稼働中 (監視中)' : '⚫️ 停止中'}
                                             </span>
                                         </div>
-                                        <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded max-w-xl truncate">
+                                        <div className="text-sm text-foreground/80 bg-white/5 p-2 rounded max-w-xl truncate border border-white/10">
                                             <span className="font-semibold">対象:</span> <a href={campaign.targetUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{campaign.targetUrl}</a>
                                         </div>
                                         <div className="flex items-center gap-3 text-sm">
-                                            <span className="font-semibold text-gray-700">条件:</span>
-                                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-bold border border-blue-100">
+                                            <span className="font-semibold text-foreground/80">条件:</span>
+                                            <span className="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded text-xs font-bold border border-blue-500/30">
                                                 {renderTriggerLabels(campaign)}
                                             </span>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${campaign.replyType === 'DM' ? 'bg-pink-50 text-pink-700 border-pink-100' : campaign.replyType === 'MENTION' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${campaign.replyType === 'DM' ? 'bg-pink-500/10 text-pink-400 border-pink-500/30' : campaign.replyType === 'MENTION' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-white/10 text-muted-foreground border-white/20'}`}>
                                                 {campaign.replyType === 'DM' ? '✉️ DM' : campaign.replyType === 'MENTION' ? '🤫 メンション' : '💬 通常リプライ'}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="w-full md:w-1/3 bg-gray-50 p-3 rounded-md border text-sm text-gray-700 max-h-24 overflow-y-auto">
-                                        <div className="font-semibold text-xs text-gray-500 mb-1 border-b pb-1">送信内容プレビュー</div>
+                                    <div className="w-full md:w-1/3 bg-white/5 p-3 rounded-md border border-white/10 text-sm text-foreground/80 max-h-24 overflow-y-auto">
+                                        <div className="font-semibold text-xs text-muted-foreground mb-1 border-b border-white/10 pb-1">送信内容プレビュー</div>
                                         <p className="whitespace-pre-wrap">{campaign.replyContent}</p>
                                     </div>
 
@@ -327,13 +327,13 @@ export default function AutoReplyPage() {
                                         <Button
                                             variant={campaign.isActive ? "outline" : "default"}
                                             onClick={() => handleToggleActive(campaign.id, campaign.isActive)}
-                                            className={campaign.isActive ? "border-red-200 hover:bg-red-50 hover:text-red-600" : ""}
+                                            className={campaign.isActive ? "border-red-500/50 hover:bg-red-500/10 hover:text-red-400" : ""}
                                         >
                                             {campaign.isActive ? "監視を停止" : "監視を再開"}
                                         </Button>
                                         <Button
                                             variant="ghost"
-                                            className="text-gray-400 hover:text-red-500 transition-colors"
+                                            className="text-muted-foreground/60 hover:text-red-400 transition-colors"
                                             onClick={() => handleDelete(campaign.id)}
                                         >
                                             🗑 削除

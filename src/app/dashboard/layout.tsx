@@ -3,19 +3,33 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import LogoutButton from "./LogoutButton";
+import Link from "next/link";
+import {
+    LayoutDashboard,
+    Settings,
+    Brain,
+    Search,
+    Sparkles,
+    CalendarDays,
+    MessageCircle,
+    BarChart3,
+    Scale,
+    ImageIcon,
+    Zap,
+    ExternalLink,
+    ChevronRight,
+} from "lucide-react";
 
 export default async function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    // セッションを取得し、未ログインなら /login へリダイレクト
     const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.email) {
         redirect("/login");
     }
 
-    // ユーザー情報の取得（Prisma連携）
     const user = await prisma.user.findUnique({
         where: { email: session.user.email },
         include: { accounts: true, settings: true }
@@ -29,116 +43,174 @@ export default async function DashboardLayout({
     const settings = user.settings as any;
     const hasManualX = !!(settings?.xApiKey && settings?.xAccessToken);
 
-    // X連携が済んでいるが、権限（スコープ）が古くて不足している場合は再連携画面へ
     const twitterAccount = linkedAccounts.find((acc: any) => acc.provider === "twitter");
     if (twitterAccount && twitterAccount.scope) {
-        const requiredScopes = ["dm.write", "tweet.write", "offline.access"];
+        // 旧ユーザー互換のため dm.* は必須にしない（新規 OAuth では auth.ts で要求される）
+        const requiredScopes = ["tweet.write", "offline.access"];
         const grantedScopes = twitterAccount.scope.split(" ");
         const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
-        
         if (missingScopes.length > 0) {
             redirect("/relink");
         }
     }
 
     return (
-        <div className="min-h-screen flex bg-gray-50">
+        <div className="min-h-screen flex bg-background">
             {/* Sidebar */}
-            <aside className="w-64 bg-white border-r flex flex-col z-50 relative">
-                <div className="h-16 flex items-center px-6 border-b flex-shrink-0">
-                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-                        ProX Agent
-                    </h1>
+            <aside className="w-64 fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/[0.06] bg-background/80 backdrop-blur-xl">
+                {/* Logo */}
+                <div className="h-16 flex items-center px-6 border-b border-white/[0.06] flex-shrink-0">
+                    <Link href="/dashboard" className="flex items-center gap-2.5 group">
+                        <div className="flex items-center justify-center size-8 rounded-lg gradient-prox shadow-lg group-hover:shadow-xl transition-shadow">
+                            <Zap className="size-4 text-white" />
+                        </div>
+                        <span className="text-lg font-bold tracking-tight text-gradient-prox">
+                            ProX
+                        </span>
+                    </Link>
                 </div>
-                <nav className="p-4 space-y-2 relative flex-1">
-                    <a href="/dashboard" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        ダッシュボード
-                    </a>
 
-                    <a href="/dashboard/kpi" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        データ分析
-                    </a>
+                <nav className="flex-1 p-3 space-y-6 overflow-y-auto custom-scrollbar">
+                    {/* Dashboard */}
+                    <div>
+                        <Link href="/dashboard" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium glass-strong text-foreground transition-all hover:bg-white/10">
+                            <LayoutDashboard className="size-4 text-purple-400" />
+                            <span>ダッシュボード</span>
+                        </Link>
+                    </div>
 
-                    {/* アカウント情報管理 (ホバーメニュー) */}
-                    <div className="relative group">
-                        <a href="#" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md flex justify-between items-center cursor-default">
-                            <span>アカウント情報管理</span>
-                            <span className="text-gray-400">▶</span>
-                        </a>
-                        {/* ポップアウトメニュー (右側に表示) */}
-                        <div className="absolute left-full top-0 w-60 z-50 pl-2 hidden group-hover:block">
-                            <div className="bg-white border border-gray-200 shadow-xl rounded-md py-2 w-full">
-                                <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b pb-2 mb-2">連携済みアカウント</div>
-                                {linkedAccounts.length === 0 && !hasManualX && (
-                                    <div className="px-4 py-2 text-sm text-gray-400">連携アカウントなし</div>
-                                )}
-                                {hasManualX && (
-                                    <a href="/dashboard/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2">
-                                        {settings?.xProfileImageUrl ? (
-                                            <img src={settings.xProfileImageUrl} alt="icon" className="w-5 h-5 rounded-full" />
-                                        ) : (
-                                            <span className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-[10px] text-gray-500">𝕏</span>
+                    {/* Step 1 */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                            連携 & ナレッジ
+                        </p>
+                        <div className="space-y-0.5">
+                            <div className="relative group">
+                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all cursor-default">
+                                    <Settings className="size-4" />
+                                    <span>アカウント管理</span>
+                                    <ChevronRight className="size-3 ml-auto opacity-50 group-hover:rotate-90 transition-transform" />
+                                </div>
+                                <div className="hidden group-hover:block mt-1 ml-3 transition-all">
+                                    <div className="glass rounded-xl py-2 w-full shadow-xl overflow-hidden">
+                                        <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider border-b border-white/5 pb-2 mb-1">
+                                            連携済みアカウント
+                                        </div>
+                                        {linkedAccounts.length === 0 && !hasManualX && (
+                                            <div className="px-4 py-2 text-sm text-muted-foreground">連携アカウントなし</div>
                                         )}
-                                        <span className="truncate">{settings?.xAccountName ? `${settings.xAccountName} (𝕏)` : "𝕏 (APIキー手動連携)"}</span>
-                                    </a>
-                                )}
-                                {linkedAccounts.map((acc: any) => (
-                                    <a key={acc.id} href={`/dashboard/settings?accountId=${acc.id}`} className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700">
-                                        {acc.accountName ? `${acc.accountName} (${acc.provider})` : `${acc.provider === "twitter" ? "𝕏" : acc.provider} (OAuth連携)`}
-                                    </a>
-                                ))}
-                                <div className="px-3 mt-2 border-t pt-2">
-                                    <a href="/dashboard/settings" className="block text-center px-4 py-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded">
-                                        + 新規アカウント追加
-                                    </a>
+                                        {hasManualX && (
+                                            <Link href="/dashboard/settings" className="flex items-center gap-2 px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
+                                                {settings?.xProfileImageUrl ? (
+                                                    <img src={settings.xProfileImageUrl} alt="icon" className="w-5 h-5 rounded-full ring-1 ring-white/10" />
+                                                ) : (
+                                                    <span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold">𝕏</span>
+                                                )}
+                                                <span className="truncate">{settings?.xAccountName ? `${settings.xAccountName} (𝕏)` : "𝕏 (設定済み)"}</span>
+                                            </Link>
+                                        )}
+                                        {linkedAccounts.map((acc: any) => (
+                                            <Link key={acc.id} href={`/dashboard/settings?accountId=${acc.id}`} className="block px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
+                                                {acc.accountName ? `${acc.accountName} (${acc.provider})` : `${acc.provider === "twitter" ? "𝕏" : acc.provider}`}
+                                            </Link>
+                                        ))}
+                                        <div className="px-3 mt-2 border-t border-white/5 pt-2">
+                                            <Link href="/dashboard/settings#x-accounts" className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-purple-300 hover:text-purple-200 glass rounded-lg transition-colors">
+                                                + 新規アカウント追加
+                                            </Link>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            <Link href="/dashboard/knowledge" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <Brain className="size-4" />
+                                <span>ナレッジベース</span>
+                            </Link>
                         </div>
                     </div>
 
-                    <a href="/dashboard/knowledge" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        ナレッジベース
-                    </a>
-                    <a href="https://docs.google.com/spreadsheets/" target="_blank" rel="noopener noreferrer" className="block px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md flex justify-between items-center">
-                        <span>🌟 本部共有ナレッジ</span>
-                        <span className="text-[10px] text-purple-400">🔗</span>
-                    </a>
-                    <a href="/dashboard/research" className="block px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md">
-                        🔍 リサーチ・横展開
-                    </a>
-                    <a href="/dashboard/analysis" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        ポジティブ/ネガティブ判定
-                    </a>
-                    <a href="/dashboard/generate" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        投稿作成
-                    </a>
-                    <a href="/dashboard/schedule" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        投稿スケジューラー
-                    </a>
-                    <a href="/dashboard/media" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        メディアライブラリ
-                    </a>
-                    <a href="/dashboard/autoreply" className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-md">
-                        自動リプライ設定
-                    </a>
+                    {/* Step 2 */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                            コンテンツ制作
+                        </p>
+                        <div className="space-y-0.5">
+                            <Link href="/dashboard/research" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <Search className="size-4" />
+                                <span>リサーチ・横展開</span>
+                            </Link>
+                            <Link href="/dashboard/generate" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <Sparkles className="size-4" />
+                                <span>投稿作成</span>
+                            </Link>
+                            <Link href="/dashboard/schedule" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <CalendarDays className="size-4" />
+                                <span>投稿スケジューラー</span>
+                            </Link>
+                        </div>
+                    </div>
 
-                    {/* --- 今後メニューが増える場合、この上にメニューを追加してください --- */}
+                    {/* Step 3 */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                            エンゲージメント
+                        </p>
+                        <div className="space-y-0.5">
+                            <Link href="/dashboard/autoreply" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <MessageCircle className="size-4" />
+                                <span>自動リプライ設定</span>
+                            </Link>
+                        </div>
+                    </div>
 
-                    {/* プロラインフリー紹介バナー (メニューの最後尾) */}
-                    <div className="pt-6 pb-2">
+                    {/* Step 4 */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                            分析 & 改善
+                        </p>
+                        <div className="space-y-0.5">
+                            <Link href="/dashboard/kpi" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <BarChart3 className="size-4" />
+                                <span>データ分析</span>
+                            </Link>
+                            <Link href="/dashboard/analysis" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <Scale className="size-4" />
+                                <span>ポジネガ判定</span>
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* Other */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                            その他
+                        </p>
+                        <div className="space-y-0.5">
+                            <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                                <ImageIcon className="size-4" />
+                                <span>メディアライブラリ</span>
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* ProLine Banner - Modernized */}
+                    <div className="pt-2 pb-6">
                         <a
-                            href="/dashboard/proline"
-                            className="block w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 p-4 shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+                            href="https://proline.jp"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600/80 to-green-700/80 p-4 transition-all hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5"
                         >
-                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20"></div>
-                            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
-                            <div className="relative z-10 flex flex-col items-center text-center">
-                                <span className="text-2xl mb-1 drop-shadow-md">🎁</span>
-                                <span className="text-white font-bold text-sm leading-tight drop-shadow-md">
-                                    ProX Agentを<br />120%活用する！
+                            <div className="relative z-10 flex flex-col space-y-2">
+                                <span className="text-white/90 font-semibold text-xs leading-snug">
+                                    X運用の売上を最大化
                                 </span>
-                                <span className="mt-2 inline-block rounded-full bg-white/20 px-3 py-1 text-[10px] font-medium text-white backdrop-blur-sm border border-white/30">
-                                    プロライン連携
+                                <div className="text-white/70 text-[10px] leading-relaxed space-y-1">
+                                    <p>LINE公式拡張ツール「プロラインフリー」</p>
+                                    <p>集客から販売まで完全自動化</p>
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-200 font-medium mt-1">
+                                    詳しく見る <ExternalLink className="size-2.5" />
                                 </span>
                             </div>
                         </a>
@@ -147,10 +219,18 @@ export default async function DashboardLayout({
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1">
-                <header className="h-16 bg-white border-b flex items-center px-6 justify-end gap-4">
-                    <span className="text-sm font-medium text-gray-700">{session.user?.name || session.user?.email}</span>
-                    <LogoutButton />
+            <main className="flex-1 ml-64">
+                <header className="sticky top-0 z-30 h-16 flex items-center justify-between border-b border-white/[0.06] bg-background/60 backdrop-blur-xl px-8">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs text-muted-foreground">
+                        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        エンジン稼働中
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm font-medium text-foreground/70">
+                            {session.user?.name || session.user?.email}
+                        </span>
+                        <LogoutButton />
+                    </div>
                 </header>
                 <div className="p-8">
                     {children}
@@ -159,4 +239,3 @@ export default async function DashboardLayout({
         </div>
     );
 }
-

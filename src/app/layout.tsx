@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ProX Agent | SNS自動化ツール",
-  description: "SNS(X/Instagram)のリサーチ〜投稿を自動化するツール",
+  title: "ProX — AI-Powered Content Engine",
+  description: "最新トレンドとナレッジを自律的にリサーチし、最適なSNSコンテンツを生成するAIエンジン",
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="ja" className="dark">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

@@ -50,7 +50,7 @@ export async function GET(req: Request) {
                         accessSecret: settings.xAccessSecret,
                     });
                 } else if (user.accounts && user.accounts.length > 0) {
-                    const twitterAccount = user.accounts.find(a => a.provider === "twitter");
+                    const twitterAccount = user.accounts.find((a: { provider: string }) => a.provider === "twitter");
                     if (twitterAccount && twitterAccount.access_token) {
                         twitterClient = new TwitterApi(twitterAccount.access_token);
                     }

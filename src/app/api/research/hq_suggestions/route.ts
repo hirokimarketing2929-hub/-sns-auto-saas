@@ -29,7 +29,7 @@ export async function GET(req: Request) {
             [hqKnowledgeItems[i], hqKnowledgeItems[j]] = [hqKnowledgeItems[j], hqKnowledgeItems[i]];
         }
 
-        const suggestions = hqKnowledgeItems.slice(0, 3).map(k => ({
+        const suggestions = hqKnowledgeItems.slice(0, 3).map((k: { id: string; category: string | null; type: string; content: string; source: string | null }) => ({
             id: k.id,
             category: k.category || "不明の型",
             type: k.type,

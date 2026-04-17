@@ -69,11 +69,11 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-            <Card className="w-full max-w-md">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+            <Card className="w-full max-w-md bg-slate-800/50 border-slate-700 backdrop-blur-sm">
                 <CardHeader className="space-y-1">
                     <CardTitle className="text-2xl text-center font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
-                        ProX Agent
+                        ProX
                     </CardTitle>
                     <CardDescription className="text-center">
                         {isLogin ? "アカウントにログインしてください" : "新しいアカウントを作成します"}
@@ -115,7 +115,7 @@ export default function LoginPage() {
                         </div>
 
                         {error && (
-                            <div className="text-sm font-medium text-red-500 bg-red-50 p-3 rounded-md">
+                            <div className="text-sm font-medium text-red-400 bg-red-900/30 p-3 rounded-md border border-red-800/50">
                                 {error}
                             </div>
                         )}
@@ -128,7 +128,7 @@ export default function LoginPage() {
                 <CardFooter>
                     <Button
                         variant="link"
-                        className="w-full text-sm text-gray-500"
+                        className="w-full text-sm text-slate-400 hover:text-slate-200"
                         onClick={() => {
                             setIsLogin(!isLogin);
                             setError("");

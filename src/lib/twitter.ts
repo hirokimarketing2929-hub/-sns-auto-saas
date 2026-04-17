@@ -36,7 +36,7 @@ export async function getTwitterClient(userId: string): Promise<TwitterApi> {
     }
 
     // 2. OAuthコンシューマートークンがあるかチェック
-    const twitterAccount = user.accounts.find((acc) => acc.provider === "twitter");
+    const twitterAccount = user.accounts.find((acc: { provider: string; access_token: string | null; refresh_token: string | null; expires_at: number | null; id: string }) => acc.provider === "twitter");
     if (!twitterAccount || !twitterAccount.access_token) {
         throw new Error("X(Twitter)アカウントが連携されていません。設定画面から連携してください。");
     }

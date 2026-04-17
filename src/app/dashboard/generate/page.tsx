@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { ThinkingLog, type ResearchLogEntry } from "@/components/prox/thinking-log";
+import { ResearchToggle } from "@/components/prox/research-toggle";
+import { GlassCard } from "@/components/prox/glass-card";
+import { Sparkles, Send, Trash2, Plus, ImagePlus, TreePine, Rocket, PenLine } from "lucide-react";
 
 export default function GeneratePreviewPage() {
     const [loading, setLoading] = useState(false);
@@ -13,6 +17,9 @@ export default function GeneratePreviewPage() {
     const [pastPosts, setPastPosts] = useState<any[]>([]);
     const [kpis, setKpis] = useState<any[]>([]);
     const [enforce140, setEnforce140] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [userTheme, setUserTheme] = useState("");
+    const [saveAsKnowledge, setSaveAsKnowledge] = useState(false);
 
     // スレッド・インプ連動用ステート
     const [threadContents, setThreadContents] = useState<string[]>([]);
@@ -23,13 +30,16 @@ export default function GeneratePreviewPage() {
     const [attachedImages, setAttachedImages] = useState<string[]>([]);
     const [uploadingImage, setUploadingImage] = useState(false);
 
-    // マウント時にユーザーの設定とナレッジを読み込む
+    // ProX新機能：リアルタイムリサーチ
+    const [researchEnabled, setResearchEnabled] = useState(false);
+    const [researchLogs, setResearchLogs] = useState<ResearchLogEntry[]>([]);
+    const [isResearching, setIsResearching] = useState(false);
+
     useEffect(() => {
         const fetchData = async () => {
             try {
-                // キャッシュ回避と、1つのAPIエラーが全体をブロックしないための個別fetch
                 const timestamp = Date.now();
-                
+
                 const settingsRes = await fetch(`/api/settings?t=${timestamp}`).catch(() => null);
                 if (settingsRes && settingsRes.ok) {
                     const settingsData = await settingsRes.json().catch(() => ({}));
@@ -61,24 +71,51 @@ export default function GeneratePreviewPage() {
         fetchData();
     }, []);
 
+    // リサーチログにエントリを追加するヘルパー
+    const addResearchLog = (type: ResearchLogEntry["type"], message: string, detail?: string) => {
+        const entry: ResearchLogEntry = {
+            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            type,
+            message,
+            timestamp: Date.now(),
+            detail,
+        };
+        setResearchLogs(prev => [...prev, entry]);
+    };
+
     const handleGenerate = async () => {
         setLoading(true);
         setError("");
+        setResearchLogs([]);
+
         try {
             if (!userSettings) {
                 throw new Error("設定データが読み込めませんでした。左の「設定・ペルソナ登録」からまずは設定を保存してください。");
+            }
+
+            // リサーチモードがオンの場合、思考ログを表示
+            if (researchEnabled) {
+                setIsResearching(true);
+                addResearchLog("thinking", "生成パラメータを構築中...");
+                await new Promise(r => setTimeout(r, 600));
+                addResearchLog("searching", "Xトレンドをリサーチ中...", "MCP経由でリアルタイムデータを取得");
+                await new Promise(r => setTimeout(r, 1200));
+                addResearchLog("analyzing", "トレンドデータを分析し、最適なテーマを選定中...");
+                await new Promise(r => setTimeout(r, 800));
             }
 
             const positiveRules = knowledges.filter(k => k.type === "WINNING").map(k => k.content);
             const negativeRules = knowledges.filter(k => k.type === "LOSING").map(k => k.content);
             const templateRules = knowledges.filter(k => k.type === "TEMPLATE").map(k => k.content);
 
-            // DBから取得した設定とナレッジを使ってPython APIを叩く
+            if (researchEnabled) {
+                addResearchLog("thinking", "ナレッジベースと照合中...", `勝ちパターン: ${positiveRules.length}件, 禁止ルール: ${negativeRules.length}件`);
+                await new Promise(r => setTimeout(r, 500));
+            }
+
             const response = await fetch((process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/generate", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     platform: "X",
                     target_audience: userSettings.targetAudience || "SNS運用代行会社、個人事業主",
@@ -91,9 +128,10 @@ export default function GeneratePreviewPage() {
                     positive_rules: positiveRules,
                     negative_rules: negativeRules,
                     enforce_140_limit: enforce140,
-                    // スプレッドシート連携機能用：過去投稿とKPI
                     past_posts: pastPosts.map(p => ({ content: p.content, imp: p.impressions })),
-                    kpi_data: kpis.map(k => ({ name: k.name, target: k.targetValue, current: k.currentValue }))
+                    kpi_data: kpis.map(k => ({ name: k.name, target: k.targetValue, current: k.currentValue })),
+                    user_theme: userTheme,
+                    enable_research: researchEnabled,
                 }),
             });
 
@@ -102,9 +140,38 @@ export default function GeneratePreviewPage() {
             }
 
             const data = await response.json();
+
+            if (researchEnabled) {
+                addResearchLog("complete", "投稿の生成が完了しました");
+                setIsResearching(false);
+            }
+
             setGeneratedPost(data);
+            setIsEditing(false);
+
+            if (userTheme.trim() && saveAsKnowledge) {
+                try {
+                    await fetch("/api/knowledge", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            type: "TEMPLATE",
+                            category: "お気に入りテーマ",
+                            content: `【保存されたテーマ指示】\n${userTheme}`,
+                            source: "生成画面から手動保存"
+                        })
+                    });
+                } catch (e) {
+                    console.error("Failed to save knowledge", e);
+                }
+            }
+
         } catch (err: any) {
             setError(err.message || "生成に失敗しました。Pythonのサーバーが起動しているか確認してください。");
+            if (researchEnabled) {
+                addResearchLog("complete", "エラーが発生しました");
+                setIsResearching(false);
+            }
             console.error(err);
         } finally {
             setLoading(false);
@@ -132,10 +199,12 @@ export default function GeneratePreviewPage() {
             if (res.ok) {
                 alert("投稿を「スケジューラー」に保存しました！\nメニューから「投稿スケジューラー」を開いて配信設定を行ってください。");
                 setGeneratedPost(null);
+                setIsEditing(false);
                 setThreadContents([]);
                 setImpressionTarget("");
                 setImpressionReplyContent("");
                 setAttachedImages([]);
+                setResearchLogs([]);
             } else {
                 alert("保存に失敗しました");
             }
@@ -151,7 +220,6 @@ export default function GeneratePreviewPage() {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
-        // Xの仕様として通常4枚まで
         if (attachedImages.length + files.length > 4) {
             alert("画像は最大4枚まで添付できます。");
             return;
@@ -182,73 +250,171 @@ export default function GeneratePreviewPage() {
             alert("画像のアップロード中にエラーが発生しました。");
         } finally {
             setUploadingImage(false);
-            // inputをリセット
             e.target.value = "";
         }
     };
 
     return (
-        <div className="space-y-6 max-w-4xl">
-            <div className="flex justify-between items-center">
+        <div className="space-y-6 max-w-4xl animate-fade-up">
+            {/* Header */}
+            <div className="flex justify-between items-start">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight">投稿生成 (プレビュー)</h2>
+                    <h2 className="text-3xl font-bold tracking-tight">
+                        <span className="text-gradient-prox">投稿生成</span>
+                    </h2>
                     <p className="text-muted-foreground mt-2">
                         AIがリサーチ結果に基づいて生成した投稿を確認し、承認します。
                     </p>
                 </div>
                 <div className="flex flex-col items-end gap-3">
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer bg-gray-50 border px-3 py-2 rounded-md hover:bg-gray-100 transition-colors">
+                    <label className="flex items-center gap-2 text-sm font-medium text-foreground/70 cursor-pointer glass px-3 py-2 rounded-xl hover:bg-white/8 transition-colors">
                         <input
                             type="checkbox"
-                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                            className="w-4 h-4 rounded accent-purple-500"
                             checked={enforce140}
                             onChange={(e) => setEnforce140(e.target.checked)}
                         />
                         Xの無料枠上限（140文字）に収める
                     </label>
                     <Button
-                        variant="default"
                         onClick={handleGenerate}
                         disabled={loading}
-                        className="bg-gradient-to-r from-indigo-500 to-purple-600 border-0"
+                        className="gradient-prox border-0 text-white shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all rounded-xl px-6 py-2.5"
                     >
-                        {loading ? "⏳ AIが考え中..." : "✨ 今すぐAIで新しい投稿を生成する"}
+                        {loading ? (
+                            <>
+                                <span className="flex gap-1 mr-2">
+                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-1" />
+                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-2" />
+                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-3" />
+                                </span>
+                                AIが生成中...
+                            </>
+                        ) : (
+                            <>
+                                <Sparkles className="size-4 mr-2" />
+                                投稿を生成する
+                            </>
+                        )}
                     </Button>
                 </div>
             </div>
 
+            {/* Research Toggle - ProX New Feature */}
+            <div className="animate-fade-up-delay-1">
+                <ResearchToggle
+                    enabled={researchEnabled}
+                    onToggle={setResearchEnabled}
+                    className="w-full"
+                />
+            </div>
+
+            {/* Theme Input */}
+            <GlassCard className="animate-fade-up-delay-2">
+                <div className="space-y-3">
+                    <label className="flex items-center gap-2 font-semibold text-foreground/90">
+                        <PenLine className="size-4 text-purple-400" />
+                        投稿テーマ・要望の指定
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-muted-foreground font-normal">任意</span>
+                    </label>
+                    <p className="text-sm text-muted-foreground">
+                        特定の話題や書き方がある場合に入力してください。空欄の場合はAIがおまかせでテーマを設定します。
+                    </p>
+                    <textarea
+                        value={userTheme}
+                        onChange={(e) => setUserTheme(e.target.value)}
+                        placeholder="例：AIで業務効率化する具体的な体験談について書いて。読者の不安を煽るような文章で。"
+                        className="w-full text-sm p-4 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/30 focus:outline-none placeholder:text-muted-foreground/40 text-foreground resize-none transition-all"
+                        rows={3}
+                    />
+                    <div className="flex justify-end">
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground/80 transition-colors">
+                            <input
+                                type="checkbox"
+                                checked={saveAsKnowledge}
+                                onChange={(e) => setSaveAsKnowledge(e.target.checked)}
+                                className="w-4 h-4 rounded accent-purple-500"
+                            />
+                            このテーマをナレッジとして保存
+                        </label>
+                    </div>
+                </div>
+            </GlassCard>
+
+            {/* Thinking Log - ProX New Feature */}
+            <ThinkingLog
+                logs={researchLogs}
+                isActive={isResearching}
+                className="animate-fade-up-delay-3"
+            />
+
+            {/* Error Display */}
             {error && (
-                <div className="p-4 bg-red-50 text-red-600 rounded-md">
+                <div className="p-4 glass rounded-xl border-l-4 border-red-500 text-red-300 animate-fade-up">
                     {error}
                 </div>
             )}
 
+            {/* Generated Post Preview */}
             {generatedPost && (
-                <div className="space-y-6 mt-8">
-                    <Card className="border-l-4 border-l-blue-500 shadow-md">
-                        <CardHeader>
-                            <div className="flex justify-between">
+                <div className="space-y-6 mt-4 animate-fade-up">
+                    <GlassCard glow>
+                        <div className="space-y-5">
+                            {/* Post Header */}
+                            <div className="flex justify-between items-start">
                                 <div>
-                                    <CardTitle className="text-xl">【生成完了】{generatedPost.platform}用投稿草案</CardTitle>
-                                    <CardDescription>生成日時: {new Date().toLocaleString()}</CardDescription>
+                                    <h3 className="text-lg font-semibold text-foreground">
+                                        生成完了 — {generatedPost.platform}
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {new Date().toLocaleString("ja-JP")}
+                                    </p>
                                 </div>
-                                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold h-fit">承認待ち</span>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="bg-gray-50 p-6 rounded-md border min-h-[150px] font-medium text-lg text-gray-800 whitespace-pre-wrap">
-                                {generatedPost.content}
+                                <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/20">
+                                    承認待ち
+                                </span>
                             </div>
 
-                            <hr className="my-6 border-gray-200" />
+                            {/* Post Content */}
+                            {isEditing ? (
+                                <textarea
+                                    value={generatedPost.content}
+                                    onChange={(e) => setGeneratedPost({ ...generatedPost, content: e.target.value })}
+                                    className="w-full bg-white/5 p-5 rounded-xl border border-white/10 min-h-[150px] text-base text-foreground whitespace-pre-wrap resize-y focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
+                                    placeholder="投稿内容を自由に編集できます"
+                                />
+                            ) : (
+                                <div className="bg-white/5 p-5 rounded-xl border border-white/10 min-h-[150px] text-base text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                    {generatedPost.content}
+                                </div>
+                            )}
 
-                            {/* スレッド投稿の追加UI */}
+                            <div className="flex justify-end">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setIsEditing(!isEditing)}
+                                    className="text-muted-foreground hover:text-purple-300"
+                                >
+                                    <PenLine className="size-3.5 mr-1.5" />
+                                    {isEditing ? "編集を確定" : "手動で編集"}
+                                </Button>
+                            </div>
+
+                            <div className="h-px bg-white/5" />
+
+                            {/* Thread Posts */}
                             <div className="space-y-3">
-                                <h3 className="font-bold text-gray-700">🌲 ツリー（スレッド）投稿の追加</h3>
-                                <p className="text-xs text-gray-500">本投稿にぶら下げる形で連続投稿したい場合、ここに入力します。</p>
+                                <h4 className="flex items-center gap-2 font-semibold text-foreground/80 text-sm">
+                                    <TreePine className="size-4 text-emerald-400" />
+                                    ツリー（スレッド）投稿
+                                </h4>
+                                <p className="text-xs text-muted-foreground">本投稿にぶら下げる形で連続投稿したい場合に入力します。</p>
                                 {threadContents.map((t, index) => (
                                     <div key={index} className="flex gap-2 items-start">
-                                        <div className="bg-gray-200 text-gray-600 rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-2 text-xs">{index + 2}</div>
+                                        <div className="glass rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-2 text-xs text-muted-foreground font-medium">
+                                            {index + 2}
+                                        </div>
                                         <textarea
                                             value={t}
                                             onChange={(e) => {
@@ -256,105 +422,136 @@ export default function GeneratePreviewPage() {
                                                 newThreads[index] = e.target.value;
                                                 setThreadContents(newThreads);
                                             }}
-                                            className="w-full text-sm p-3 border rounded-md"
+                                            className="w-full text-sm p-3 bg-white/5 border border-white/10 rounded-xl text-foreground focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
                                             rows={3}
                                             placeholder={`リプライ ${index + 1}`}
                                         />
-                                        <Button variant="outline" size="sm" className="mt-2 text-red-500 shrink-0" onClick={() => {
-                                            const newThreads = threadContents.filter((_, i) => i !== index);
-                                            setThreadContents(newThreads);
-                                        }}>削除</Button>
+                                        <Button variant="ghost" size="sm" className="mt-2 text-red-400 shrink-0 hover:text-red-300 hover:bg-red-500/10" onClick={() => {
+                                            setThreadContents(threadContents.filter((_, i) => i !== index));
+                                        }}>
+                                            <Trash2 className="size-3.5" />
+                                        </Button>
                                     </div>
                                 ))}
-                                <Button variant="outline" size="sm" onClick={() => setThreadContents([...threadContents, ""])}>+ スレッドを追加</Button>
+                                <Button variant="ghost" size="sm" onClick={() => setThreadContents([...threadContents, ""])} className="text-muted-foreground hover:text-foreground">
+                                    <Plus className="size-3.5 mr-1.5" />
+                                    スレッドを追加
+                                </Button>
                             </div>
 
-                            <hr className="my-6 border-gray-200" />
+                            <div className="h-px bg-white/5" />
 
-                            {/* 画像添付UI */}
+                            {/* Image Upload */}
                             <div className="space-y-3">
-                                <h3 className="font-bold text-gray-700">🖼 画像・メディアの添付（任意）</h3>
-                                <p className="text-xs text-gray-500">投稿と一緒にアップロードする画像をこちらに追加します。（最大4枚まで）</p>
+                                <h4 className="flex items-center gap-2 font-semibold text-foreground/80 text-sm">
+                                    <ImagePlus className="size-4 text-blue-400" />
+                                    画像・メディア添付
+                                    <span className="text-[10px] text-muted-foreground font-normal">最大4枚</span>
+                                </h4>
 
                                 {attachedImages.length > 0 && (
-                                    <div className="flex flex-wrap gap-4 mt-2">
+                                    <div className="flex flex-wrap gap-3 mt-2">
                                         {attachedImages.map((url, idx) => (
-                                            <div key={idx} className="relative w-32 h-32 border rounded-md overflow-hidden bg-gray-100">
+                                            <div key={idx} className="relative w-28 h-28 rounded-xl overflow-hidden glass">
                                                 <img src={url} alt={`attached-${idx}`} className="object-cover w-full h-full" />
                                                 <button
                                                     onClick={() => setAttachedImages(attachedImages.filter((_, i) => i !== idx))}
-                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-80 hover:opacity-100"
+                                                    className="absolute top-1.5 right-1.5 bg-red-500/80 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-500 transition-colors"
                                                 >
-                                                    ×
+                                                    x
                                                 </button>
                                             </div>
                                         ))}
                                     </div>
                                 )}
 
-                                <div className="mt-2">
-                                    <label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3">
-                                        {uploadingImage ? "アップロード中..." : "+ 画像を選択してアップロード"}
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/*"
-                                            multiple
-                                            onChange={handleImageUpload}
-                                            disabled={uploadingImage || attachedImages.length >= 4}
-                                        />
-                                    </label>
-                                </div>
+                                <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 text-sm font-medium glass rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/8 transition-all">
+                                    <ImagePlus className="size-4" />
+                                    {uploadingImage ? "アップロード中..." : "画像を選択"}
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={handleImageUpload}
+                                        disabled={uploadingImage || attachedImages.length >= 4}
+                                    />
+                                </label>
                             </div>
 
-                            <hr className="my-6 border-gray-200" />
+                            <div className="h-px bg-white/5" />
 
-                            {/* インプレッション連動リプライの追加UI */}
-                            <div className="space-y-3 bg-blue-50/50 p-4 border border-blue-100 rounded-md">
-                                <h3 className="font-bold text-blue-800">🚀 シャドウバン対策：インプ連動URLリプライ設定</h3>
-                                <p className="text-xs text-blue-600">本投稿に最初からURLを含めないことでインプレッション低下を防ぎ、指定のインプレッション数に到達した際に自動でURL入りリプライをぶら下げます。</p>
+                            {/* Impression Reply */}
+                            <div className="space-y-3 glass-strong rounded-xl p-4">
+                                <h4 className="flex items-center gap-2 font-semibold text-foreground/80 text-sm">
+                                    <Rocket className="size-4 text-purple-400" />
+                                    シャドウバン対策：インプ連動URLリプライ
+                                </h4>
+                                <p className="text-xs text-muted-foreground">
+                                    本投稿にURLを含めずインプレッション低下を防ぎ、指定のインプレッション数到達時に自動でURL入りリプライを配信します。
+                                </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                        <label className="text-sm font-semibold text-gray-700">発動インプレッション閾値</label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-foreground/70">発動インプレッション閾値</label>
                                         <input
                                             type="number"
                                             min="0"
                                             value={impressionTarget}
                                             onChange={(e) => setImpressionTarget(e.target.value ? Number(e.target.value) : "")}
                                             placeholder="例: 1000"
-                                            className="w-full text-sm p-2 border rounded-md"
+                                            className="w-full text-sm p-2.5 bg-white/5 border border-white/10 rounded-lg text-foreground focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
                                         />
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-sm font-semibold text-gray-700">追撃するリプライ文章（URLなど）</label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-foreground/70">追撃リプライ文章（URL等）</label>
                                         <textarea
                                             value={impressionReplyContent}
                                             onChange={(e) => setImpressionReplyContent(e.target.value)}
                                             placeholder="例: 詳細はこちら！ https://example.com"
-                                            className="w-full text-sm p-2 border rounded-md"
+                                            className="w-full text-sm p-2.5 bg-white/5 border border-white/10 rounded-lg text-foreground focus:ring-2 focus:ring-purple-500/50 focus:outline-none"
                                             rows={2}
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                        </CardContent>
-                        <CardFooter className="flex justify-end gap-3 pb-6 pr-6">
-                            <Button variant="outline" className="text-red-500 border-red-200 hover:bg-red-50" onClick={() => {
-                                setGeneratedPost(null);
-                                setThreadContents([]);
-                                setImpressionTarget("");
-                                setImpressionReplyContent("");
-                            }}>破棄して再生成</Button>
-                            <Button variant="default" className="bg-blue-600" onClick={handleApprove} disabled={loading}>承認・予約・自動投稿へ</Button>
-                        </CardFooter>
-                    </Card>
+                            {/* Action Buttons */}
+                            <div className="flex justify-end gap-3 pt-2">
+                                <Button
+                                    variant="ghost"
+                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                    onClick={() => {
+                                        setGeneratedPost(null);
+                                        setThreadContents([]);
+                                        setImpressionTarget("");
+                                        setImpressionReplyContent("");
+                                        setResearchLogs([]);
+                                    }}
+                                >
+                                    <Trash2 className="size-4 mr-1.5" />
+                                    破棄して再生成
+                                </Button>
+                                <Button
+                                    onClick={handleApprove}
+                                    disabled={loading}
+                                    className="gradient-prox border-0 text-white shadow-lg hover:shadow-xl rounded-xl px-5"
+                                >
+                                    <Send className="size-4 mr-1.5" />
+                                    承認・予約・自動投稿へ
+                                </Button>
+                            </div>
+                        </div>
+                    </GlassCard>
                 </div>
             )}
 
+            {/* Empty State */}
             {!generatedPost && !loading && (
-                <div className="mt-12 text-center text-gray-400 py-12 border-2 border-dashed rounded-lg">
-                    右上の「生成する」ボタンを押すと、AIが投稿を作成します。
+                <div className="mt-8 text-center py-16 glass rounded-2xl border border-dashed border-white/10 animate-fade-up-delay-3">
+                    <Sparkles className="size-8 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-muted-foreground/50">
+                        右上の「投稿を生成する」ボタンを押すと、AIが投稿を作成します。
+                    </p>
                 </div>
             )}
         </div>

@@ -21,7 +21,16 @@ export async function GET() {
             return NextResponse.json({ message: "ユーザーが見つかりません" }, { status: 404 });
         }
 
-        const hasTwitterOAuth = user.accounts.some((acc) => acc.provider === "twitter");
+        const twitterAccounts = user.accounts
+            .filter((acc: any) => acc.provider === "twitter")
+            .map((acc: any) => ({
+                id: acc.id,
+                provider: acc.provider,
+                providerAccountId: acc.providerAccountId,
+                accountName: acc.accountName,
+                scope: acc.scope,
+            }));
+        const hasTwitterOAuth = twitterAccounts.length > 0;
 
         // 設定がない場合はデフォルト値を返す
         if (!user.settings) {
@@ -30,11 +39,11 @@ export async function GET() {
                     userId: user.id
                 }
             });
-            return NextResponse.json({ ...defaultSettings, hasTwitterOAuth });
+            return NextResponse.json({ ...defaultSettings, hasTwitterOAuth, twitterAccounts });
         }
 
-        // anyキャストでTypeScriptエラーを回避しつつhasTwitterOAuthを追加
-        const responseData = { ...(user.settings as any), hasTwitterOAuth };
+        // anyキャストでTypeScriptエラーを回避しつつhasTwitterOAuth/twitterAccountsを追加
+        const responseData = { ...(user.settings as any), hasTwitterOAuth, twitterAccounts };
         return NextResponse.json(responseData);
     } catch (error) {
         console.error("Settings GET error:", error);

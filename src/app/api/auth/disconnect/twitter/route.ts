@@ -19,13 +19,23 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ message: "ユーザーが見つかりません" }, { status: 404 });
         }
 
-        // Twitterアカウントの連携情報を削除
-        await prisma.account.deleteMany({
-            where: {
-                userId: user.id,
-                provider: "twitter"
+        // accountId が指定されていれば単一アカウントのみ解除、未指定なら全 X 連携を解除
+        const { searchParams } = new URL(req.url);
+        const accountId = searchParams.get("accountId");
+
+        if (accountId) {
+            const acc = await prisma.account.findFirst({
+                where: { id: accountId, userId: user.id, provider: "twitter" }
+            });
+            if (!acc) {
+                return NextResponse.json({ message: "対象アカウントが見つかりません" }, { status: 404 });
             }
-        });
+            await prisma.account.delete({ where: { id: acc.id } });
+        } else {
+            await prisma.account.deleteMany({
+                where: { userId: user.id, provider: "twitter" }
+            });
+        }
 
         return NextResponse.json({ message: "X (Twitter) アカウントの連携を解除しました。" });
     } catch (error) {

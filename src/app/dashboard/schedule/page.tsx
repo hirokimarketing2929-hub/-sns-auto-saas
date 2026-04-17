@@ -111,15 +111,15 @@ export default function SchedulePage() {
             </div>
 
             {loading ? (
-                <div className="py-12 text-center text-gray-500">データを読み込み中...</div>
+                <div className="py-12 text-center text-muted-foreground">データを読み込み中...</div>
             ) : posts.length === 0 ? (
-                <div className="mt-12 text-center text-gray-400 py-12 border-2 border-dashed rounded-lg">
+                <div className="mt-12 text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
                     保存された投稿がありません。「投稿生成」からAIに投稿を作成させてください。
                 </div>
             ) : (
                 <div className="grid gap-6">
                     {posts.map((post) => (
-                        <Card key={post.id} className={post.status === 'PUBLISHED' ? "bg-gray-50 opacity-80" : ""}>
+                        <Card key={post.id} className={post.status === 'PUBLISHED' ? "bg-white/5 opacity-80" : ""}>
                             <CardHeader className="pb-3">
                                 <div className="flex justify-between items-start">
                                     <div>
@@ -141,7 +141,7 @@ export default function SchedulePage() {
                                 </div>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="bg-white p-4 rounded-md border text-gray-800 whitespace-pre-wrap text-sm shadow-inner">
+                                <div className="bg-white/5 p-4 rounded-md border border-white/10 text-foreground/80 whitespace-pre-wrap text-sm shadow-inner">
                                     {post.content}
                                 </div>
 
@@ -149,7 +149,7 @@ export default function SchedulePage() {
                                 {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
                                     <div className="flex flex-wrap gap-2 mt-2">
                                         {JSON.parse(post.mediaUrls).map((url: string, i: number) => (
-                                            <div key={i} className="w-24 h-24 border rounded-md overflow-hidden bg-gray-100 shrink-0">
+                                            <div key={i} className="w-24 h-24 border border-white/10 rounded-md overflow-hidden bg-white/5 shrink-0">
                                                 <img src={url} alt={`media-${i}`} className="object-cover w-full h-full" />
                                             </div>
                                         ))}
@@ -158,11 +158,11 @@ export default function SchedulePage() {
 
                                 {/* ツリー投稿の表示 */}
                                 {post.threadContents && JSON.parse(post.threadContents).length > 0 && (
-                                    <div className="pl-4 border-l-2 border-indigo-200 space-y-2">
-                                        <p className="text-xs font-bold text-indigo-600 mb-1">🌲 続くスレッド投稿</p>
+                                    <div className="pl-4 border-l-2 border-purple-500/30 space-y-2">
+                                        <p className="text-xs font-bold text-purple-400 mb-1">🌲 続くスレッド投稿</p>
                                         {JSON.parse(post.threadContents).map((t: string, i: number) => (
-                                            <div key={i} className="bg-gray-50 p-3 rounded-md border text-sm text-gray-700 whitespace-pre-wrap">
-                                                <span className="text-indigo-400 font-bold mr-2">#{i + 2}</span>{t}
+                                            <div key={i} className="bg-white/5 p-3 rounded-md border border-white/10 text-sm text-foreground/80 whitespace-pre-wrap">
+                                                <span className="text-purple-400 font-bold mr-2">#{i + 2}</span>{t}
                                             </div>
                                         ))}
                                     </div>
@@ -170,10 +170,10 @@ export default function SchedulePage() {
 
                                 {/* インプレッション連動の表示 */}
                                 {post.impressionTarget && post.impressionReplyContent && (
-                                    <div className="bg-blue-50 p-3 rounded-md border border-blue-100 mt-2">
-                                        <p className="text-xs font-bold text-blue-800 mb-1">🚀 インプレッション連動リプライ</p>
-                                        <p className="text-xs text-blue-700 mb-2">このポストが <span className="font-bold text-lg">{post.impressionTarget}</span> imp を突破した時に自動で以下のリプライをぶら下げます。</p>
-                                        <div className="bg-white p-2 border rounded-sm text-sm whitespace-pre-wrap text-gray-700">
+                                    <div className="bg-blue-500/10 p-3 rounded-md border border-blue-500/20 mt-2">
+                                        <p className="text-xs font-bold text-blue-400 mb-1">🚀 インプレッション連動リプライ</p>
+                                        <p className="text-xs text-blue-300 mb-2">このポストが <span className="font-bold text-lg">{post.impressionTarget}</span> imp を突破した時に自動で以下のリプライをぶら下げます。</p>
+                                        <div className="bg-white/5 p-2 border border-white/10 rounded-sm text-sm whitespace-pre-wrap text-foreground/80">
                                             {post.impressionReplyContent}
                                         </div>
                                     </div>
@@ -185,7 +185,7 @@ export default function SchedulePage() {
                                         <div className="flex items-center gap-2 mr-auto mb-2 md:mb-0">
                                             <input
                                                 type="datetime-local"
-                                                className="border shadow-sm rounded-md px-3 py-2 text-sm"
+                                                className="border border-white/10 bg-white/5 shadow-sm rounded-md px-3 py-2 text-sm text-foreground"
                                                 value={schedulingDates[post.id] || (post.scheduledAt ? new Date(new Date(post.scheduledAt).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "")}
                                                 onChange={(e) => handleDateChange(post.id, e.target.value)}
                                                 disabled={publishing === post.id}
