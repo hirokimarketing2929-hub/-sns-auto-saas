@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { TwitterApi } from "twitter-api-v2";
 
 export async function GET(req: Request) {
+    // Vercel Cron / 手動トリガーのみ許可
+    const authHeader = req.headers.get("authorization");
+    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     try {
         console.log("Starting scheduled posts publish cron job...");
 

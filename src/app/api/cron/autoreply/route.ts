@@ -4,6 +4,12 @@ import { getTwitterClient } from "@/lib/twitter";
 import { TwitterApi } from "twitter-api-v2";
 
 export async function GET(req: Request) {
+    // Vercel Cron / 手動トリガーのみ許可
+    const authHeader = req.headers.get("authorization");
+    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     try {
         // Prisma Client の型定義不整合を回避するため、anyキャストで強行突破 (マイグレーションは完了している前提)
         const db = prisma as any;
