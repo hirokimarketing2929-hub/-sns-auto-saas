@@ -110,7 +110,7 @@ export default async function DashboardLayout({
                                             </Link>
                                         )}
                                         {linkedAccounts.map((acc: any) => (
-                                            <Link key={acc.id} href={`/dashboard/settings?accountId=${acc.id}`} className="block px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
+                                            <Link key={acc.id} href={`/dashboard/settings?accountId=${acc.id}#x-accounts`} className="block px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
                                                 {acc.accountName ? `${acc.accountName} (${acc.provider})` : `${acc.provider === "twitter" ? "𝕏" : acc.provider}`}
                                             </Link>
                                         ))}

@@ -44,6 +44,8 @@ export default function SettingsPage() {
         spreadsheetUrl: "",
     });
 
+    const focusedAccountId = searchParams.get("accountId");
+
     useEffect(() => {
         fetchSettings();
     }, []);
@@ -56,6 +58,15 @@ export default function SettingsPage() {
             setMessage({ text: "この X アカウントは既に別のユーザーに連携されています。", type: "error" });
         }
     }, [searchParams]);
+
+    // サイドバーから ?accountId=... で来た場合、該当アカウント行までスクロール
+    useEffect(() => {
+        if (!focusedAccountId || loading) return;
+        const el = document.getElementById(`x-account-${focusedAccountId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    }, [focusedAccountId, loading, twitterAccounts.length]);
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -207,21 +218,40 @@ export default function SettingsPage() {
                         <p className="text-sm text-muted-foreground">連携済みのXアカウントはありません。</p>
                     ) : (
                         <ul className="space-y-2">
-                            {twitterAccounts.map((acc) => (
-                                <li key={acc.id} className="flex items-center justify-between border rounded-md px-4 py-2 bg-white">
-                                    <div className="flex flex-col">
-                                        <span className="font-medium">{acc.accountName || `𝕏 (${acc.providerAccountId})`}</span>
-                                        <span className="text-xs text-muted-foreground truncate max-w-[480px]">scope: {acc.scope || "-"}</span>
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => handleDisconnectTwitter(acc.id)}
+                            {twitterAccounts.map((acc) => {
+                                const isFocused = focusedAccountId === acc.id;
+                                return (
+                                    <li
+                                        key={acc.id}
+                                        id={`x-account-${acc.id}`}
+                                        className={
+                                            "flex items-center justify-between border rounded-md px-4 py-2 transition-all " +
+                                            (isFocused
+                                                ? "bg-sky-50 border-sky-400 ring-2 ring-sky-300"
+                                                : "bg-white")
+                                        }
                                     >
-                                        解除
-                                    </Button>
-                                </li>
-                            ))}
+                                        <div className="flex flex-col">
+                                            <span className="font-medium flex items-center gap-2">
+                                                {acc.accountName || `𝕏 (${acc.providerAccountId})`}
+                                                {isFocused && (
+                                                    <span className="text-[10px] font-bold text-sky-700 bg-sky-100 border border-sky-300 rounded-full px-2 py-0.5">
+                                                        選択中
+                                                    </span>
+                                                )}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground truncate max-w-[480px]">scope: {acc.scope || "-"}</span>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => handleDisconnectTwitter(acc.id)}
+                                        >
+                                            解除
+                                        </Button>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                     <Button type="button" onClick={handleLinkNewTwitter} className="w-full md:w-auto">
