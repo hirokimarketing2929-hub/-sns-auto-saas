@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { ThinkingLog, type ResearchLogEntry } from "@/components/prox/thinking-log";
 import { ResearchToggle } from "@/components/prox/research-toggle";
 import { GlassCard } from "@/components/prox/glass-card";
-import { Sparkles, Send, Trash2, Plus, ImagePlus, TreePine, Rocket, PenLine } from "lucide-react";
+import { Sparkles, Send, Trash2, Plus, ImagePlus, TreePine, Rocket, PenLine, Bot, Pencil, CalendarClock } from "lucide-react";
 
 export default function GeneratePreviewPage() {
     const [loading, setLoading] = useState(false);
@@ -21,8 +21,16 @@ export default function GeneratePreviewPage() {
     const [userTheme, setUserTheme] = useState("");
     const [saveAsKnowledge, setSaveAsKnowledge] = useState(false);
 
+    // 作成モード：AI生成 / 手動で作成
+    const [creationMode, setCreationMode] = useState<"ai" | "manual">("ai");
+    const [manualContent, setManualContent] = useState("");
+
+    // 予約投稿用
+    const [scheduledAt, setScheduledAt] = useState<string>(""); // datetime-local 形式
+
     // スレッド・インプ連動用ステート
     const [threadContents, setThreadContents] = useState<string[]>([]);
+    const [threadStyle, setThreadStyle] = useState<"chain" | "impression_triggered">("chain");
     const [impressionTarget, setImpressionTarget] = useState<number | "">("");
     const [impressionReplyContent, setImpressionReplyContent] = useState<string>("");
 
@@ -113,30 +121,20 @@ export default function GeneratePreviewPage() {
                 await new Promise(r => setTimeout(r, 500));
             }
 
-            const response = await fetch((process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/generate", {
+            const response = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     platform: "X",
-                    target_audience: userSettings.targetAudience || "SNS運用代行会社、個人事業主",
-                    target_pain: userSettings.targetPain || "フォロワーが伸びない、集客から販売につながらない",
-                    cta_url: userSettings.ctaUrl || "https://proline.example.com",
-                    account_concept: userSettings.accountConcept || "",
-                    profile: userSettings.profile || "",
-                    policy: userSettings.policy || "",
-                    template_rules: templateRules,
-                    positive_rules: positiveRules,
-                    negative_rules: negativeRules,
                     enforce_140_limit: enforce140,
-                    past_posts: pastPosts.map(p => ({ content: p.content, imp: p.impressions })),
-                    kpi_data: kpis.map(k => ({ name: k.name, target: k.targetValue, current: k.currentValue })),
                     user_theme: userTheme,
                     enable_research: researchEnabled,
                 }),
             });
 
             if (!response.ok) {
-                throw new Error("AIサーバーのエラーが発生しました");
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || "AI サーバーのエラーが発生しました");
             }
 
             const data = await response.json();
@@ -178,8 +176,29 @@ export default function GeneratePreviewPage() {
         }
     };
 
-    const handleApprove = async () => {
+    const persistPost = async (options: { schedule: boolean }) => {
         if (!generatedPost) return;
+        // impression_triggered 選択時は目標インプ数が必須
+        if (threadContents.length > 0 && threadStyle === "impression_triggered" && !impressionTarget) {
+            alert("「📈 一定インプ達成後に送信」を選ぶ場合は、下の『🎯 インプレッション連動』で目標インプ数を入力してください。");
+            return;
+        }
+
+        // 予約投稿時は日時が必須で、未来日時のみ許可
+        let scheduledIso: string | null = null;
+        if (options.schedule) {
+            if (!scheduledAt) {
+                alert("予約日時を指定してください。");
+                return;
+            }
+            const d = new Date(scheduledAt);
+            if (Number.isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+                alert("予約日時は未来の時刻を指定してください。");
+                return;
+            }
+            scheduledIso = d.toISOString();
+        }
+
         setLoading(true);
         try {
             const res = await fetch("/api/posts", {
@@ -188,8 +207,10 @@ export default function GeneratePreviewPage() {
                 body: JSON.stringify({
                     content: generatedPost.content,
                     platform: generatedPost.platform,
-                    status: "DRAFT",
+                    status: options.schedule ? "SCHEDULED" : "DRAFT",
+                    scheduledAt: scheduledIso,
                     threadContents: threadContents.length > 0 ? JSON.stringify(threadContents) : null,
+                    threadStyle,
                     impressionTarget: impressionTarget ? Number(impressionTarget) : null,
                     impressionReplyContent: impressionReplyContent || null,
                     mediaUrls: attachedImages.length > 0 ? JSON.stringify(attachedImages) : null
@@ -197,16 +218,24 @@ export default function GeneratePreviewPage() {
             });
 
             if (res.ok) {
-                alert("投稿を「スケジューラー」に保存しました！\nメニューから「投稿スケジューラー」を開いて配信設定を行ってください。");
+                if (options.schedule) {
+                    alert(`✅ 予約投稿を登録しました。\n配信予定: ${new Date(scheduledIso!).toLocaleString()}`);
+                } else {
+                    alert("投稿を「スケジューラー」に保存しました！\nメニューから「投稿スケジューラー」を開いて配信設定を行ってください。");
+                }
                 setGeneratedPost(null);
                 setIsEditing(false);
                 setThreadContents([]);
+                setThreadStyle("chain");
                 setImpressionTarget("");
                 setImpressionReplyContent("");
                 setAttachedImages([]);
                 setResearchLogs([]);
+                setManualContent("");
+                setScheduledAt("");
             } else {
-                alert("保存に失敗しました");
+                const err = await res.json().catch(() => ({}));
+                alert(`保存に失敗しました${err.message ? `: ${err.message}` : ""}`);
             }
         } catch (error) {
             console.error("Save error:", error);
@@ -276,77 +305,181 @@ export default function GeneratePreviewPage() {
                         />
                         Xの無料枠上限（140文字）に収める
                     </label>
-                    <Button
-                        onClick={handleGenerate}
-                        disabled={loading}
-                        className="gradient-prox border-0 text-white shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all rounded-xl px-6 py-2.5"
-                    >
-                        {loading ? (
-                            <>
-                                <span className="flex gap-1 mr-2">
-                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-1" />
-                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-2" />
-                                    <span className="size-1.5 rounded-full bg-white animate-thinking-dot-3" />
-                                </span>
-                                AIが生成中...
-                            </>
-                        ) : (
-                            <>
-                                <Sparkles className="size-4 mr-2" />
-                                投稿を生成する
-                            </>
-                        )}
-                    </Button>
+                    {creationMode === "ai" ? (
+                        <Button
+                            onClick={handleGenerate}
+                            disabled={loading}
+                            className="gradient-prox border-0 text-white shadow-lg hover:shadow-xl hover:shadow-purple-500/20 transition-all rounded-xl px-6 py-2.5"
+                        >
+                            {loading ? (
+                                <>
+                                    <span className="flex gap-1 mr-2">
+                                        <span className="size-1.5 rounded-full bg-white animate-thinking-dot-1" />
+                                        <span className="size-1.5 rounded-full bg-white animate-thinking-dot-2" />
+                                        <span className="size-1.5 rounded-full bg-white animate-thinking-dot-3" />
+                                    </span>
+                                    AIが生成中...
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="size-4 mr-2" />
+                                    投稿を生成する
+                                </>
+                            )}
+                        </Button>
+                    ) : (
+                        <Button
+                            onClick={() => {
+                                if (!manualContent.trim()) {
+                                    alert("投稿本文を入力してください。");
+                                    return;
+                                }
+                                setGeneratedPost({ content: manualContent, platform: "X" });
+                                setIsEditing(false);
+                                setError("");
+                            }}
+                            disabled={loading || !manualContent.trim()}
+                            className="bg-slate-900 hover:bg-slate-800 border-0 text-white shadow-lg transition-all rounded-xl px-6 py-2.5"
+                        >
+                            <Pencil className="size-4 mr-2" />
+                            この内容で作成する
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            {/* Research Toggle - ProX New Feature */}
-            <div className="animate-fade-up-delay-1">
-                <ResearchToggle
-                    enabled={researchEnabled}
-                    onToggle={setResearchEnabled}
-                    className="w-full"
-                />
+            {/* 作成モード切替タブ */}
+            <div className="flex gap-1 border-b border-white/10">
+                <button
+                    type="button"
+                    onClick={() => setCreationMode("ai")}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors rounded-t-xl ${creationMode === "ai"
+                        ? "border-purple-500 text-purple-400 bg-purple-500/10"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                >
+                    <Bot className="size-4" />
+                    🤖 AIで生成
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setCreationMode("manual")}
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors rounded-t-xl ${creationMode === "manual"
+                        ? "border-slate-500 text-slate-300 bg-slate-500/10"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/5"}`}
+                >
+                    <Pencil className="size-4" />
+                    ✍️ 手動で作成
+                </button>
             </div>
 
-            {/* Theme Input */}
-            <GlassCard className="animate-fade-up-delay-2">
-                <div className="space-y-3">
-                    <label className="flex items-center gap-2 font-semibold text-foreground/90">
-                        <PenLine className="size-4 text-purple-400" />
-                        投稿テーマ・要望の指定
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-muted-foreground font-normal">任意</span>
-                    </label>
-                    <p className="text-sm text-muted-foreground">
-                        特定の話題や書き方がある場合に入力してください。空欄の場合はAIがおまかせでテーマを設定します。
-                    </p>
-                    <textarea
-                        value={userTheme}
-                        onChange={(e) => setUserTheme(e.target.value)}
-                        placeholder="例：AIで業務効率化する具体的な体験談について書いて。読者の不安を煽るような文章で。"
-                        className="w-full text-sm p-4 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/30 focus:outline-none placeholder:text-muted-foreground/40 text-foreground resize-none transition-all"
-                        rows={3}
-                    />
-                    <div className="flex justify-end">
-                        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground/80 transition-colors">
-                            <input
-                                type="checkbox"
-                                checked={saveAsKnowledge}
-                                onChange={(e) => setSaveAsKnowledge(e.target.checked)}
-                                className="w-4 h-4 rounded accent-purple-500"
-                            />
-                            このテーマをナレッジとして保存
-                        </label>
+            {creationMode === "ai" && (
+                <>
+                    {/* Research Toggle - ProX New Feature */}
+                    <div className="animate-fade-up-delay-1">
+                        <ResearchToggle
+                            enabled={researchEnabled}
+                            onToggle={setResearchEnabled}
+                            className="w-full"
+                        />
                     </div>
-                </div>
-            </GlassCard>
 
-            {/* Thinking Log - ProX New Feature */}
-            <ThinkingLog
-                logs={researchLogs}
-                isActive={isResearching}
-                className="animate-fade-up-delay-3"
-            />
+                    {/* Theme Input */}
+                    <GlassCard className="animate-fade-up-delay-2">
+                        <div className="space-y-3">
+                            <label className="flex items-center gap-2 font-semibold text-foreground/90">
+                                <PenLine className="size-4 text-purple-400" />
+                                投稿テーマ・要望の指定
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-muted-foreground font-normal">任意</span>
+                            </label>
+                            <p className="text-sm text-muted-foreground">
+                                特定の話題や書き方がある場合に入力してください。空欄の場合はAIがおまかせでテーマを設定します。
+                            </p>
+                            <textarea
+                                value={userTheme}
+                                onChange={(e) => setUserTheme(e.target.value)}
+                                placeholder="例：AIで業務効率化する具体的な体験談について書いて。読者の感情に刺さるような文章で。"
+                                className="w-full text-sm p-4 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/30 focus:outline-none placeholder:text-muted-foreground/40 text-foreground resize-none transition-all"
+                                rows={3}
+                            />
+                            <div className="flex justify-end">
+                                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer hover:text-foreground/80 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={saveAsKnowledge}
+                                        onChange={(e) => setSaveAsKnowledge(e.target.checked)}
+                                        className="w-4 h-4 rounded accent-purple-500"
+                                    />
+                                    このテーマをナレッジとして保存
+                                </label>
+                            </div>
+                        </div>
+                    </GlassCard>
+
+                    {/* Thinking Log - ProX New Feature */}
+                    <ThinkingLog
+                        logs={researchLogs}
+                        isActive={isResearching}
+                        className="animate-fade-up-delay-3"
+                    />
+                </>
+            )}
+
+            {creationMode === "manual" && (
+                <GlassCard className="animate-fade-up-delay-1">
+                    <div className="space-y-3">
+                        <label className="flex items-center gap-2 font-semibold text-foreground/90">
+                            <Pencil className="size-4 text-slate-400" />
+                            投稿本文を手動で作成
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 font-bold">必須</span>
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                            AIを使わずに自分でゼロから投稿を書きたいときはこちら。本文を入力して「この内容で作成する」を押すと、ツリー投稿・画像・インプ連動・スケジューラー保存などの付帯機能が開きます。
+                        </p>
+                        <textarea
+                            value={manualContent}
+                            onChange={(e) => setManualContent(e.target.value)}
+                            placeholder="例：こんにちは。今日は〇〇について話します。結論は△△です。理由は..."
+                            className="w-full text-sm p-4 bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-slate-500/50 focus:border-slate-500/30 focus:outline-none placeholder:text-muted-foreground/40 text-foreground resize-y transition-all"
+                            rows={10}
+                        />
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground">{manualContent.length} 文字</span>
+                            <span className={manualContent.length > 140 ? "text-rose-400 font-semibold" : "text-muted-foreground"}>
+                                {manualContent.length > 140 ? `140字を ${manualContent.length - 140} 字超過` : "140字以内"}
+                            </span>
+                        </div>
+                        {manualContent.length > 140 && (
+                            <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs text-rose-400 leading-relaxed">
+                                <span className="font-bold shrink-0">※</span>
+                                <span>
+                                    <span className="font-bold">X 無料プラン（旧 Basic）では 140 字を超える投稿は配信できません</span>。
+                                    このまま保存・予約は可能ですが、実際に配信するには X Premium（旧 Blue）以上のアカウント連携が必要です。
+                                </span>
+                            </div>
+                        )}
+                        {/* テキストエリア外・右下の作成ボタン */}
+                        <div className="flex justify-end">
+                            <Button
+                                type="button"
+                                onClick={() => {
+                                    if (!manualContent.trim()) {
+                                        alert("投稿本文を入力してください。");
+                                        return;
+                                    }
+                                    setGeneratedPost({ content: manualContent, platform: "X" });
+                                    setIsEditing(false);
+                                    setError("");
+                                }}
+                                disabled={loading || !manualContent.trim()}
+                                className="bg-slate-900 hover:bg-slate-800 text-white border-0 shadow-md rounded-lg px-4 py-2.5 h-auto text-sm disabled:opacity-40"
+                            >
+                                <Pencil className="size-4 mr-1.5" />
+                                この内容で作成する<span className="ml-1.5 text-[11px] opacity-80">（ツリー投稿などを設定する）</span>
+                            </Button>
+                        </div>
+                    </div>
+                </GlassCard>
+            )}
 
             {/* Error Display */}
             {error && (
@@ -389,7 +522,13 @@ export default function GeneratePreviewPage() {
                                 </div>
                             )}
 
-                            <div className="flex justify-end">
+                            <div className="flex justify-between items-center gap-3">
+                                <div className="text-xs">
+                                    <span className="text-muted-foreground">{generatedPost.content.length} 文字</span>
+                                    <span className={`ml-3 ${generatedPost.content.length > 140 ? "text-rose-400 font-semibold" : "text-muted-foreground"}`}>
+                                        {generatedPost.content.length > 140 ? `140字を ${generatedPost.content.length - 140} 字超過` : "140字以内"}
+                                    </span>
+                                </div>
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -401,6 +540,16 @@ export default function GeneratePreviewPage() {
                                 </Button>
                             </div>
 
+                            {generatedPost.content.length > 140 && (
+                                <div className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-xs text-rose-400 leading-relaxed">
+                                    <span className="font-bold shrink-0">※</span>
+                                    <span>
+                                        <span className="font-bold">X 無料プラン（旧 Basic）では 140 字を超える投稿は配信できません</span>。
+                                        このまま保存・予約は可能ですが、実際に配信するには X Premium（旧 Blue）以上のアカウント連携が必要です。
+                                    </span>
+                                </div>
+                            )}
+
                             <div className="h-px bg-white/5" />
 
                             {/* Thread Posts */}
@@ -410,6 +559,66 @@ export default function GeneratePreviewPage() {
                                     ツリー（スレッド）投稿
                                 </h4>
                                 <p className="text-xs text-muted-foreground">本投稿にぶら下げる形で連続投稿したい場合に入力します。</p>
+
+                                {/* スレッドスタイル選択 */}
+                                {threadContents.length > 0 && (
+                                    <div className="flex flex-col gap-3 p-3 bg-white/5 border border-white/10 rounded-xl">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                            <span className="text-xs font-semibold text-foreground/80 shrink-0">送信タイミング:</span>
+                                            <div className="flex gap-2 flex-wrap">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setThreadStyle("chain")}
+                                                    className={`text-xs px-3 py-1.5 rounded-md border transition-colors font-semibold ${threadStyle === "chain"
+                                                        ? "bg-emerald-600 border-emerald-600 text-white shadow-sm"
+                                                        : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                                                >
+                                                    🔗 投稿時に即リプ連鎖
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setThreadStyle("impression_triggered")}
+                                                    className={`text-xs px-3 py-1.5 rounded-md border transition-colors font-semibold ${threadStyle === "impression_triggered"
+                                                        ? "bg-amber-600 border-amber-600 text-white shadow-sm"
+                                                        : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                                                >
+                                                    📈 一定インプ達成後に送信
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                                            {threadStyle === "chain"
+                                                ? "元ポストに続けて案1→案2→案3 の順でリプ連鎖で今すぐ投稿します。"
+                                                : "元ポストのみ先に投稿し、下で指定した目標インプ数を元ポストが超えた時点で、続きの案をリプ連鎖で自動送信します。"}
+                                        </p>
+
+                                        {/* impression_triggered 選択時のインライン入力 */}
+                                        {threadStyle === "impression_triggered" && (
+                                            <div className="space-y-1.5 pt-2 border-t border-white/10">
+                                                <label className="text-xs font-semibold text-foreground/80 flex items-center gap-1.5">
+                                                    🎯 目標インプレッション数
+                                                    <span className="text-[10px] text-rose-500 font-bold">*必須</span>
+                                                </label>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="100"
+                                                        value={impressionTarget}
+                                                        onChange={(e) => setImpressionTarget(e.target.value ? Number(e.target.value) : "")}
+                                                        placeholder="例: 10000"
+                                                        className="flex-1 text-sm p-2 bg-white border border-slate-300 rounded-md text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/50 focus:outline-none"
+                                                    />
+                                                    <span className="text-xs text-muted-foreground shrink-0">imp 超えたら送信</span>
+                                                </div>
+                                                <p className="text-[11px] text-muted-foreground/80">
+                                                    15分ごとに cron が元ポストのインプ数をチェックし、この値を超えた瞬間に続きのリプが自動で投稿されます。
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                                 {threadContents.map((t, index) => (
                                     <div key={index} className="flex gap-2 items-start">
                                         <div className="glass rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-2 text-xs text-muted-foreground font-medium">
@@ -515,8 +724,41 @@ export default function GeneratePreviewPage() {
                                 </div>
                             </div>
 
+                            {/* 予約投稿日時指定 */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-white/5 border border-white/10 rounded-xl">
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <CalendarClock className="size-4 text-blue-400" />
+                                    <span className="text-sm font-semibold text-foreground/90">予約配信日時</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-muted-foreground font-normal">任意</span>
+                                </div>
+                                <input
+                                    type="datetime-local"
+                                    value={scheduledAt}
+                                    onChange={(e) => setScheduledAt(e.target.value)}
+                                    onClick={(e) => {
+                                        const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                                        if (typeof el.showPicker === "function") el.showPicker();
+                                    }}
+                                    onFocus={(e) => {
+                                        const el = e.currentTarget as HTMLInputElement & { showPicker?: () => void };
+                                        if (typeof el.showPicker === "function") el.showPicker();
+                                    }}
+                                    min={new Date(Date.now() + 60000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+                                    className="flex-1 h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm text-foreground cursor-pointer"
+                                />
+                                {scheduledAt && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setScheduledAt("")}
+                                        className="text-xs text-muted-foreground hover:text-red-400 underline shrink-0"
+                                    >
+                                        クリア
+                                    </button>
+                                )}
+                            </div>
+
                             {/* Action Buttons */}
-                            <div className="flex justify-end gap-3 pt-2">
+                            <div className="flex flex-col md:flex-row justify-end gap-3 pt-2">
                                 <Button
                                     variant="ghost"
                                     className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
@@ -526,18 +768,30 @@ export default function GeneratePreviewPage() {
                                         setImpressionTarget("");
                                         setImpressionReplyContent("");
                                         setResearchLogs([]);
+                                        setScheduledAt("");
                                     }}
                                 >
                                     <Trash2 className="size-4 mr-1.5" />
                                     破棄して再生成
                                 </Button>
                                 <Button
-                                    onClick={handleApprove}
+                                    onClick={() => persistPost({ schedule: false })}
                                     disabled={loading}
-                                    className="gradient-prox border-0 text-white shadow-lg hover:shadow-xl rounded-xl px-5"
+                                    variant="outline"
+                                    className="border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl px-5"
                                 >
                                     <Send className="size-4 mr-1.5" />
-                                    承認・予約・自動投稿へ
+                                    下書きとして保存
+                                </Button>
+                                <Button
+                                    onClick={() => persistPost({ schedule: true })}
+                                    disabled={loading || !scheduledAt}
+                                    className="bg-blue-600 hover:bg-blue-700 border-0 text-white shadow-lg hover:shadow-xl rounded-xl px-5 disabled:opacity-50"
+                                >
+                                    <CalendarClock className="size-4 mr-1.5" />
+                                    {scheduledAt
+                                        ? `📅 ${new Date(scheduledAt).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} に予約投稿`
+                                        : "📅 予約投稿（日時選択後）"}
                                 </Button>
                             </div>
                         </div>

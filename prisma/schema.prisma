@@ -23,6 +23,10 @@ model User {
   kpiScenarios  KpiScenario[] // 追加：KPIシナリオ
   autoReplyCampaigns AutoReplyCampaign[] // 追加：自動リプライキャンペーン
   media         Media[] // ユーザーがアップロードしたメディア
+  apiUsageLogs  ApiUsageLog[] // AI/X API 使用量ログ
+  funnelEvents  FunnelEvent[] // プロラインフリー等の外部フォーム登録イベント
+  replyEngagementTargets     ReplyEngagementTarget[]     // リプ回り半自動化のターゲットアカウント
+  replyEngagementSuggestions ReplyEngagementSuggestion[] // 生成されたリプ案の履歴
 
   // サブスクリプション・ストレージ管理
   plan          String   @default("FREE") // FREE, STANDARD, PRO
@@ -95,8 +99,22 @@ model Settings {
   xAccountName   String?  // 追加：手動連携アカウントの管理名
   xProfileImageUrl String? // 追加：手動連携アカウントのアイコン画像URL
 
+  // 生成AI プロバイダのキー（BYOK、ユーザーごと）
+  anthropicApiKey String?
+  openaiApiKey    String?
+
   // 外部ツール（スプレッドシート・GAS）連携用
   spreadsheetUrl String?
+
+  // プロラインフリー連携用：ユーザー固有のフック受信 token（URL に埋め込む）
+  funnelWebhookToken String? @unique
+
+  // ChatWork 連携（リプ回り半自動化機能で使用）
+  chatworkApiToken String?
+  chatworkRoomId   String?
+
+  // リプ回り半自動化の閾値（これを超えるインプのポストだけ拾う）
+  replyEngagementMinImp Int @default(500)
 
   updatedAt    DateTime @updatedAt
 }
@@ -115,6 +133,12 @@ model PastPost {
   // パフォーマンスデータ
   impressions  Int      @default(0)
   conversions  Int      @default(0)
+  replies      Int      @default(0)   // リプライ数（public_metrics.reply_count）
+  retweets     Int      @default(0)   // RT 数（public_metrics.retweet_count）
+  likes        Int      @default(0)   // いいね数（public_metrics.like_count）
+  quotes       Int      @default(0)   // 引用RT 数（public_metrics.quote_count）
+  urlClicks    Int      @default(0)   // 外部URL クリック数（non_public_metrics.url_link_clicks、30日限定）
+  profileClicks Int     @default(0)   // プロフィールクリック（non_public_metrics.user_profile_clicks、30日限定）
 
   // 分析ステータス ("UNANALYZED", "POSITIVE", "NEGATIVE")
   analysisStatus String @default("UNANALYZED")
@@ -133,6 +157,7 @@ model Knowledge {
   category     String?  // 追加：勝ち筋などの詳細分類（例: 共感系、ノウハウ系）
   source       String?  // どの投稿から抽出したか等
   isSharedToHQ Boolean  @default(false) // 追加：本部へ共有するかどうかのフラグ
+  order        Int      @default(0)    // ドラッグ&ドロップの優先度（同一 type 内で小さいほど上位）
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -151,6 +176,7 @@ model Post {
   mediaUrls              String?  // 画像等のメディアURL（JSON配列文字列）
   postedTweetId          String?  // 実際に投稿されたXのポストID（インプ監視・リプライ用）
   threadContents         String?  // [ツリー投稿] スレッドとしてぶら下げる投稿のJSON文字列配列
+  threadStyle            String   @default("chain")  // "chain": 投稿時にリプ連鎖で即座にぶら下げ / "impression_triggered": 元ポストが impressionTarget を超えた時点でリプ連鎖で送信
   impressionTarget       Int?     // [インプ連動] 対象インプレッション数閾値（これを超えたらリプライ発動）
   impressionReplyContent String?  // [インプ連動] インプレッション到達時にぶら下げるリプライ（URL等）
   isImpressionReplySent  Boolean  @default(false) // [インプ連動] リプライ送信済みかどうかのフラグ
@@ -169,6 +195,13 @@ model KpiScenario {
   order        Int      // 任意の並び順
   targetValue  Int      @default(0) // 目標数値
   currentValue Int      @default(0) // 現在の実績数値
+
+  // 自動反映ソース：manual (手入力) / x_* / proline_*
+  //   例: "manual", "x_followers", "x_impressions_total", "x_posts_count",
+  //       "proline_registrations_total", "proline_registrations_today",
+  //       "proline_form:<formName>"
+  metricSource String   @default("manual")
+  metricPeriodDays Int? // X系メトリクスで期間指定が必要なとき（例: 30 = 直近30日）
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -189,6 +222,10 @@ model AutoReplyCampaign {
   replyContent String   // 自動返信するテキスト内容
   isActive     Boolean  @default(true) // キャンペーンが稼働中かどうか
   replyType    String   @default("REPLY") // 送信方式 ("REPLY", "MENTION", "DM")
+  triggerMode  String   @default("OR") // 複数トリガー時の合成ロジック："OR"=いずれか / "AND"=全て満たす
+  endsAt       DateTime? // キャンペーン終了日時（null の場合は無期限）。この時刻を過ぎた cron 実行では自動的に isActive=false に倒す
+  checkIntervalMinutes Int @default(5) // チェック間隔（分）。1 / 5 / 15 / 30 / 60 のいずれかをユーザーが選択
+  lastCheckedAt DateTime? // 最後に cron がチェックした時刻（interval 判定に使用）
 
   logs         AutoReplyLog[] // 送信履歴リレーション
 
@@ -223,4 +260,101 @@ model Media {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// リプ回り半自動化のターゲットアカウント（最大10件/ユーザー）
+model ReplyEngagementTarget {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  username    String   // X のユーザー名（@抜き）
+  displayName String?  // 表示名（キャッシュ）
+  isActive    Boolean  @default(true)
+  lastCheckedAt DateTime?
+
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, username])
+  @@index([userId, isActive])
+}
+
+// AI が生成したリプ案の履歴（重複防止 + 振り返り用）
+model ReplyEngagementSuggestion {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  targetUsername String   // 対象アカウントの username
+  tweetId        String   // 対象ポスト ID
+  tweetUrl       String   // 対象ポストの URL
+  tweetText      String   // 対象ポストの本文
+  impressions    Int?     // 対象ポストのインプ数（取得できた場合）
+
+  variants       String   // JSON 文字列配列（3案）
+  notifiedAt     DateTime? // ChatWork 送信時刻
+  status         String   @default("pending") // pending / notified / failed
+
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, tweetId])
+  @@index([userId, createdAt])
+}
+
+// プロラインフリー等の外部フォームから受け取った登録イベント
+//   - GAS 経由で webhook として POST されてくる
+//   - date/uid/snsname 等の固定カラム + 任意の動的フィールドを rawData に保存
+model FunnelEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  source      String   @default("proline")  // "proline" / "other"
+  formName    String?                         // ProLine フォーム名（シート名由来）
+  externalUid String?                         // プロライン uid (LINE userId 等)
+  displayName String?                         // snsname
+
+  // UTM パラメータ（可能なら LP 側から渡してもらう）
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?  // 関連ポスト ID を入れる想定
+
+  rawData     Json?    // 生の form_data を丸ごと保存
+
+  occurredAt  DateTime @default(now())  // プロライン側のイベント発生時刻（date フィールドがあれば優先）
+  receivedAt  DateTime @default(now())  // 本 SaaS が受け取った時刻
+
+  @@index([userId, occurredAt])
+  @@index([userId, utmCampaign])
+  @@index([userId, source, occurredAt])
+}
+
+// AI (Claude/OpenAI) および X API の使用量ログ
+model ApiUsageLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider  String   // "anthropic" | "openai" | "x"
+  operation String   // "generate" | "research-structure" | "research-extract" | "x-single-tweet" | "x-user-timeline" | etc.
+  model     String?  // e.g. "claude-sonnet-4-6", "gpt-4o"。X API では null
+
+  // LLM 用
+  inputTokens  Int?
+  outputTokens Int?
+  costUsd      Float?  // $ 概算コスト
+
+  // X API 用（レートリミット情報）
+  xRateLimitRemaining Int?
+  xRateLimitMax       Int?
+  xRateLimitReset     DateTime?
+
+  success      Boolean  @default(true)
+  errorMessage String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, provider, createdAt])
 }

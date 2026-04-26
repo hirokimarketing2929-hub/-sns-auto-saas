@@ -13,14 +13,22 @@ export async function GET(req: Request) {
     try {
         const db = prisma as any;
 
-        // 対象となるポスト（投稿済み、監視条件あり、未返信、投稿ID保持）を取得
+        // 対象となるポストを取得:
+        //   - 投稿済み (status=PUBLISHED)
+        //   - postedTweetId 保持
+        //   - impressionTarget が設定されている
+        //   - かつ「未配信の遅延ツリー投稿を持つ」か「未送信の impression リプがある」
+        //   - isImpressionReplySent=false（既に送信完了なら除外）
         const trackingPosts = await db.post.findMany({
             where: {
                 status: "PUBLISHED",
                 postedTweetId: { not: null },
                 impressionTarget: { not: null },
-                impressionReplyContent: { not: null },
-                isImpressionReplySent: false
+                isImpressionReplySent: false,
+                OR: [
+                    { impressionReplyContent: { not: null } },
+                    { AND: [{ threadStyle: "impression_triggered" }, { threadContents: { not: null } }] }
+                ]
             },
             include: {
                 user: { select: { settings: true, accounts: true } }
@@ -76,26 +84,59 @@ export async function GET(req: Request) {
                         const targetPost = userPosts.find(p => p.postedTweetId === tweet.id);
 
                         if (targetPost && impressions >= targetPost.impressionTarget) {
-                            // 閾値に達したのでリプライを送信
-                            runLogs.push(`Post ${targetPost.id} Reached Target (${impressions}/${targetPost.impressionTarget}). Replying...`);
+                            // 閾値に達したので、遅延ツリー投稿 → インプ連動リプの順でぶら下げる
+                            runLogs.push(`Post ${targetPost.id} Reached Target (${impressions}/${targetPost.impressionTarget}).`);
 
-                            try {
-                                const rwClient = client.readWrite;
-                                await rwClient.v2.reply(targetPost.impressionReplyContent, tweet.id);
+                            const rwClient = client.readWrite;
+                            let lastTweetId: string = tweet.id;
+                            let anySuccess = false;
+                            let anyFailure = false;
 
-                                // 送信済みフラグを立てる
+                            // (a) 遅延ツリー投稿（threadStyle=impression_triggered の時のみ）
+                            if (targetPost.threadStyle === "impression_triggered" && targetPost.threadContents) {
+                                try {
+                                    const threads: unknown = JSON.parse(targetPost.threadContents);
+                                    if (Array.isArray(threads) && threads.length > 0) {
+                                        runLogs.push(`-> Sending ${threads.length} deferred thread posts...`);
+                                        for (const text of threads) {
+                                            if (typeof text !== "string" || !text.trim()) continue;
+                                            try {
+                                                const r = await rwClient.v2.reply(text, lastTweetId);
+                                                lastTweetId = r.data.id;
+                                                anySuccess = true;
+                                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                            } catch (tErr: any) {
+                                                anyFailure = true;
+                                                runLogs.push(`-> Failed thread reply: ${tErr.message || ""}`);
+                                            }
+                                        }
+                                    }
+                                } catch (parseErr) {
+                                    runLogs.push(`-> Failed to parse threadContents for ${targetPost.id}`);
+                                }
+                            }
+
+                            // (b) インプ連動リプ（impressionReplyContent が設定されていれば）
+                            if (targetPost.impressionReplyContent) {
+                                try {
+                                    await rwClient.v2.reply(targetPost.impressionReplyContent, lastTweetId);
+                                    anySuccess = true;
+                                    await new Promise(resolve => setTimeout(resolve, 1500));
+                                    runLogs.push(`-> Successfully replied impression content to ${tweet.id}`);
+                                } catch (replyError: any) {
+                                    anyFailure = true;
+                                    console.error(`Failed to execute impression reply for ${tweet.id}`, replyError);
+                                    runLogs.push(`-> Failed impression reply to ${tweet.id}: ${replyError.message || ""}`);
+                                }
+                            }
+
+                            // 全体のうち少なくとも1件でも成功していればフラグを立てる（冪等性）
+                            if (anySuccess) {
                                 await db.post.update({
                                     where: { id: targetPost.id },
                                     data: { isImpressionReplySent: true }
                                 });
-
-                                runLogs.push(`-> Successfully replied to ${tweet.id}`);
-
-                                // RateLimit対策のウェイト
-                                await new Promise(resolve => setTimeout(resolve, 1500));
-                            } catch (replyError: any) {
-                                console.error(`Failed to execute impression reply for ${tweet.id}`, replyError);
-                                runLogs.push(`-> Failed reply to ${tweet.id}: ${replyError.message || ""}`);
+                                runLogs.push(`-> Marked ${targetPost.id} as isImpressionReplySent=true${anyFailure ? " (partial)" : ""}`);
                             }
                         } else if (targetPost) {
                             runLogs.push(`Post ${targetPost.id} Not Reached (${impressions}/${targetPost.impressionTarget})`);

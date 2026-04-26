@@ -56,8 +56,8 @@ export default async function DashboardLayout({
 
     return (
         <div className="min-h-screen flex bg-background">
-            {/* Sidebar */}
-            <aside className="w-64 fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/[0.06] bg-background/80 backdrop-blur-xl">
+            {/* Sidebar（暗めに固定） */}
+            <aside className="w-64 fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/[0.06] bg-neutral-950">
                 {/* Logo */}
                 <div className="h-16 flex items-center px-6 border-b border-white/[0.06] flex-shrink-0">
                     <Link href="/dashboard" className="flex items-center gap-2.5 group">
@@ -81,12 +81,12 @@ export default async function DashboardLayout({
 
                     {/* Step 1 */}
                     <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
-                            連携 & ナレッジ
+                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
+                            STEP 1: 連携 & ナレッジ
                         </p>
                         <div className="space-y-0.5">
                             <div className="relative group">
-                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all cursor-default">
+                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all cursor-default">
                                     <Settings className="size-4" />
                                     <span>アカウント管理</span>
                                     <ChevronRight className="size-3 ml-auto opacity-50 group-hover:rotate-90 transition-transform" />
@@ -122,7 +122,7 @@ export default async function DashboardLayout({
                                     </div>
                                 </div>
                             </div>
-                            <Link href="/dashboard/knowledge" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/knowledge" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <Brain className="size-4" />
                                 <span>ナレッジベース</span>
                             </Link>
@@ -131,19 +131,19 @@ export default async function DashboardLayout({
 
                     {/* Step 2 */}
                     <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
-                            コンテンツ制作
+                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
+                            STEP 2: コンテンツ制作
                         </p>
                         <div className="space-y-0.5">
-                            <Link href="/dashboard/research" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/research" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <Search className="size-4" />
                                 <span>リサーチ・横展開</span>
                             </Link>
-                            <Link href="/dashboard/generate" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/generate" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <Sparkles className="size-4" />
                                 <span>投稿作成</span>
                             </Link>
-                            <Link href="/dashboard/schedule" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/schedule" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <CalendarDays className="size-4" />
                                 <span>投稿スケジューラー</span>
                             </Link>
@@ -152,41 +152,45 @@ export default async function DashboardLayout({
 
                     {/* Step 3 */}
                     <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
-                            エンゲージメント
+                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
+                            STEP 3: エンゲージメント
                         </p>
                         <div className="space-y-0.5">
-                            <Link href="/dashboard/autoreply" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/autoreply" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <MessageCircle className="size-4" />
                                 <span>自動リプライ設定</span>
+                            </Link>
+                            <Link href="/dashboard/reply-engagement" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                <Sparkles className="size-4" />
+                                <span>リプ周り半自動化</span>
                             </Link>
                         </div>
                     </div>
 
                     {/* Step 4 */}
                     <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
-                            分析 & 改善
+                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
+                            STEP 4: 分析 & 改善
                         </p>
                         <div className="space-y-0.5">
-                            <Link href="/dashboard/kpi" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/analysis" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <BarChart3 className="size-4" />
                                 <span>データ分析</span>
                             </Link>
-                            <Link href="/dashboard/analysis" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/kpi" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <Scale className="size-4" />
-                                <span>ポジネガ判定</span>
+                                <span>KPI 目標</span>
                             </Link>
                         </div>
                     </div>
 
                     {/* Other */}
                     <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
                             その他
                         </p>
                         <div className="space-y-0.5">
-                            <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
+                            <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <ImageIcon className="size-4" />
                                 <span>メディアライブラリ</span>
                             </Link>
@@ -218,15 +222,28 @@ export default async function DashboardLayout({
                 </nav>
             </aside>
 
-            {/* Main Content */}
-            <main className="flex-1 ml-64">
-                <header className="sticky top-0 z-30 h-16 flex items-center justify-between border-b border-white/[0.06] bg-background/60 backdrop-blur-xl px-8">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs text-muted-foreground">
-                        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        エンジン稼働中
+            {/* Main Content（作業画面は白系の明るいテーマ） */}
+            <main className="flex-1 ml-64 light-scope bg-white min-h-screen text-foreground">
+                <header className="sticky top-0 z-30 h-16 flex items-center justify-between border-b border-neutral-200 bg-white/80 backdrop-blur-xl px-8 gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full glass text-xs text-muted-foreground shrink-0">
+                            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            エンジン稼働中
+                        </div>
+                        <a
+                            href="https://x.com/hiroki_proline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/30 text-xs font-medium text-rose-600 transition-colors truncate"
+                            title="エラーがあった場合は X で引用リツイートして公開フィードバックをお願いします！"
+                        >
+                            <span className="text-[13px]">🐞</span>
+                            <span className="truncate">エラーがあった場合は X で引用リツイートで公開フィードバックをお待ちしてます！</span>
+                            <ExternalLink className="size-3 shrink-0 opacity-70" />
+                        </a>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm font-medium text-foreground/70">
+                    <div className="flex items-center gap-4 shrink-0">
+                        <span className="text-sm font-medium text-foreground/70 hidden sm:inline">
                             {session.user?.name || session.user?.email}
                         </span>
                         <LogoutButton />

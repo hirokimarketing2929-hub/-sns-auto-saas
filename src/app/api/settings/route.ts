@@ -68,11 +68,35 @@ export async function PUT(req: Request) {
             return NextResponse.json({ message: "ユーザーが見つかりません" }, { status: 404 });
         }
 
-        let finalAccountName = data.xAccountName;
-        let finalProfileImageUrl = data.xProfileImageUrl || null; // 既存があれば維持
+        // 部分更新対応：リクエストに含まれたフィールドのみを書き込む（未送信のフィールドは保持）
+        const has = (key: string) => Object.prototype.hasOwnProperty.call(data, key);
+        const updateFields: Record<string, unknown> = {};
 
-        // xAccountName または アイコン が空で、APIキーが入力されている場合（自動取得）
-        if ((!finalAccountName || !finalProfileImageUrl) && data.xApiKey && data.xApiSecret && data.xAccessToken && data.xAccessSecret) {
+        for (const key of [
+            "targetAudience",
+            "targetPain",
+            "ctaUrl",
+            "accountConcept",
+            "profile",
+            "xApiKey",
+            "xApiSecret",
+            "xAccessToken",
+            "xAccessSecret",
+            "spreadsheetUrl",
+            "anthropicApiKey",
+            "openaiApiKey",
+            "chatworkApiToken",
+            "chatworkRoomId",
+            "replyEngagementMinImp",
+        ]) {
+            if (has(key)) updateFields[key] = data[key];
+        }
+
+        // X アカウント名 / アイコンは、明示送信または APIキー連携による自動取得があった場合のみ更新
+        let xAccountName: string | undefined = has("xAccountName") ? data.xAccountName : undefined;
+        let xProfileImageUrl: string | null | undefined = has("xProfileImageUrl") ? (data.xProfileImageUrl || null) : undefined;
+
+        if ((!xAccountName || !xProfileImageUrl) && data.xApiKey && data.xApiSecret && data.xAccessToken && data.xAccessSecret) {
             try {
                 const client = new TwitterApi({
                     appKey: data.xApiKey,
@@ -81,50 +105,20 @@ export async function PUT(req: Request) {
                     accessSecret: data.xAccessSecret,
                 });
                 const me = await client.v2.me({ "user.fields": ["profile_image_url"] });
-                if (!finalAccountName) finalAccountName = `@${me.data.username}`;
-                if (!finalProfileImageUrl && me.data.profile_image_url) finalProfileImageUrl = me.data.profile_image_url;
+                if (!xAccountName) xAccountName = `@${me.data.username}`;
+                if (!xProfileImageUrl && me.data.profile_image_url) xProfileImageUrl = me.data.profile_image_url;
             } catch (err) {
                 console.error("Failed to fetch twitter profile automatically:", err);
             }
         }
 
+        if (xAccountName !== undefined) updateFields.xAccountName = xAccountName;
+        if (xProfileImageUrl !== undefined) updateFields.xProfileImageUrl = xProfileImageUrl;
+
         const updatedSettings = await prisma.settings.upsert({
             where: { userId: user.id },
-            update: {
-                targetAudience: data.targetAudience,
-                targetPain: data.targetPain,
-                ctaUrl: data.ctaUrl,
-                competitor1: data.competitor1,
-                competitor2: data.competitor2,
-                accountConcept: data.accountConcept,
-                profile: data.profile,
-                policy: data.policy,
-                xApiKey: data.xApiKey,
-                xApiSecret: data.xApiSecret,
-                xAccessToken: data.xAccessToken,
-                xAccessSecret: data.xAccessSecret,
-                xAccountName: finalAccountName,
-                xProfileImageUrl: finalProfileImageUrl,
-                spreadsheetUrl: data.spreadsheetUrl,
-            },
-            create: {
-                userId: user.id,
-                targetAudience: data.targetAudience,
-                targetPain: data.targetPain,
-                ctaUrl: data.ctaUrl,
-                competitor1: data.competitor1,
-                competitor2: data.competitor2,
-                accountConcept: data.accountConcept,
-                profile: data.profile,
-                policy: data.policy,
-                xApiKey: data.xApiKey,
-                xApiSecret: data.xApiSecret,
-                xAccessToken: data.xAccessToken,
-                xAccessSecret: data.xAccessSecret,
-                xAccountName: finalAccountName,
-                xProfileImageUrl: finalProfileImageUrl,
-                spreadsheetUrl: data.spreadsheetUrl,
-            }
+            update: updateFields,
+            create: { userId: user.id, ...updateFields }
         });
 
         return NextResponse.json(updatedSettings);

@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
         const knowledges = await prisma.knowledge.findMany({
             where: { userId: user.id },
-            orderBy: { createdAt: 'desc' }
+            orderBy: [{ order: 'asc' }, { createdAt: 'desc' }]
         });
 
         return NextResponse.json(knowledges);

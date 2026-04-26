@@ -37,8 +37,7 @@ export async function POST(req: Request) {
                     target_audience: settings.targetAudience || "",
                     target_pain: settings.targetPain || "",
                     account_concept: settings.accountConcept || "",
-                    profile: settings.profile || "",
-                    policy: settings.policy || ""
+                    profile: settings.profile || ""
                 }),
                 signal: AbortSignal.timeout(30000),
             });

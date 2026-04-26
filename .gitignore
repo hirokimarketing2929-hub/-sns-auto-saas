@@ -29,6 +29,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.next-dev.log
+.next-dev.pid
+.vercel-deploy.log
+scripts-check_*.mjs
 
 # env files (can opt-in for committing if needed)
 .env*

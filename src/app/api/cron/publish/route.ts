@@ -91,11 +91,15 @@ export async function GET(req: Request) {
                 }
 
                 // 2. ツイート処理
+                //    threadStyle = "chain" は今すぐリプ連鎖でぶら下げ、
+                //    "impression_triggered" は元ポストのみ投稿し、続くリプは impressionTarget 到達時に cron/check-impressions が送る
                 const threadContents = post.threadContents ? JSON.parse(post.threadContents) : [];
+                const threadStyle = (post as { threadStyle?: string }).threadStyle === "impression_triggered" ? "impression_triggered" : "chain";
+                const postThreadsNow = threadContents.length > 0 && threadStyle === "chain";
                 let firstTweetId = null;
 
-                if (threadContents.length === 0) {
-                    // 単発ツイート
+                if (!postThreadsNow) {
+                    // 単発 or 遅延投稿モード: 元ポストだけ送る
                     const tweetPayload: any = { text: post.content };
                     if (mediaIds.length > 0) {
                         tweetPayload.media = { media_ids: mediaIds };
@@ -103,24 +107,20 @@ export async function GET(req: Request) {
                     const response = await twitterClient.v2.tweet(tweetPayload);
                     firstTweetId = response.data.id;
                 } else {
-                    // ツリー（スレッド）ツイート
-                    const tweetsPayload = [];
-
+                    // chain モード: 元ポストに続けて今すぐリプ連鎖
                     const firstPayload: any = { text: post.content };
                     if (mediaIds.length > 0) {
                         firstPayload.media = { media_ids: mediaIds };
                     }
-                    tweetsPayload.push(firstPayload);
+                    const rootResp = await twitterClient.v2.tweet(firstPayload);
+                    firstTweetId = rootResp.data.id;
+                    let lastId = firstTweetId;
 
                     for (const t of threadContents) {
-                        if (t && t.trim() !== '') {
-                            tweetsPayload.push({ text: t });
-                        }
-                    }
-
-                    const threadResponse = await twitterClient.v2.tweetThread(tweetsPayload);
-                    if (threadResponse && threadResponse.length > 0) {
-                        firstTweetId = threadResponse[0].data.id;
+                        if (!t || t.trim() === '') continue;
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        const replyRes = await twitterClient.v2.reply(t, lastId);
+                        lastId = replyRes.data.id;
                     }
                 }
 

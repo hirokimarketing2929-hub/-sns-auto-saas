@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
+import { logXApiUsage } from "@/lib/api-usage";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -33,10 +34,20 @@ export async function POST(req: Request) {
         const me = await client.v2.me();
         const twitterUserId = me.data.id;
 
+        // non_public_metrics (url_link_clicks / user_profile_clicks) は 30 日以内のみ取得可
+        const startTime30 = new Date();
+        startTime30.setDate(startTime30.getDate() - 30);
+
         const tweets = await client.v2.userTimeline(twitterUserId, {
             max_results: 100,
-            "tweet.fields": ["created_at", "public_metrics"],
-            exclude: ["retweets", "replies"]
+            "tweet.fields": ["created_at", "public_metrics", "non_public_metrics"],
+            exclude: ["retweets", "replies"],
+            start_time: startTime30.toISOString(),
+        });
+        await logXApiUsage({
+            userId: user.id,
+            operation: "x-user-timeline-sync",
+            rateLimit: (tweets as unknown as { rateLimit?: { limit?: number; remaining?: number; reset?: number } }).rateLimit,
         });
 
         if (!tweets.data?.data || tweets.data.data.length === 0) {
@@ -53,12 +64,24 @@ export async function POST(req: Request) {
         let positiveCount = 0;
         let negativeCount = 0;
 
-        for (const tweet of tweets.data.data) {
-            const impressions = tweet.public_metrics?.impression_count ?? 0;
+        type TweetFromApi = {
+            id: string;
+            text: string;
+            created_at?: string;
+            public_metrics?: { impression_count?: number; like_count?: number; retweet_count?: number; reply_count?: number; quote_count?: number };
+            non_public_metrics?: { url_link_clicks?: number; user_profile_clicks?: number; impression_count?: number };
+        };
+
+        for (const rawTweet of tweets.data.data) {
+            const tweet = rawTweet as unknown as TweetFromApi;
+            const impressions = tweet.non_public_metrics?.impression_count ?? tweet.public_metrics?.impression_count ?? 0;
             const likes = tweet.public_metrics?.like_count ?? 0;
             const retweets = tweet.public_metrics?.retweet_count ?? 0;
             const replies = tweet.public_metrics?.reply_count ?? 0;
-            const engagements = likes + retweets + replies;
+            const quotes = tweet.public_metrics?.quote_count ?? 0;
+            const urlClicks = tweet.non_public_metrics?.url_link_clicks ?? 0;
+            const profileClicks = tweet.non_public_metrics?.user_profile_clicks ?? 0;
+            const engagements = likes + retweets + replies + quotes;
 
             let analysisStatus = "NEGATIVE";
             if (impressions >= thresholdImp) {
@@ -71,9 +94,15 @@ export async function POST(req: Request) {
             await prisma.pastPost.upsert({
                 where: { externalId: tweet.id },
                 update: {
-                    impressions: impressions,
+                    impressions,
                     conversions: engagements,
-                    analysisStatus: analysisStatus,
+                    replies,
+                    retweets,
+                    likes,
+                    quotes,
+                    urlClicks,
+                    profileClicks,
+                    analysisStatus,
                 },
                 create: {
                     userId: user.id,
@@ -81,9 +110,15 @@ export async function POST(req: Request) {
                     platform: "X",
                     postedAt: tweet.created_at ? new Date(tweet.created_at) : new Date(),
                     externalId: tweet.id,
-                    impressions: impressions,
+                    impressions,
                     conversions: engagements,
-                    analysisStatus: analysisStatus,
+                    replies,
+                    retweets,
+                    likes,
+                    quotes,
+                    urlClicks,
+                    profileClicks,
+                    analysisStatus,
                 }
             });
             syncedCount++;

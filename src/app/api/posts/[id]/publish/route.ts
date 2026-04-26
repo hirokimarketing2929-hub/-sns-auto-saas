@@ -83,19 +83,22 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         const rootTweetId = tweetResponse.data.id;
         let lastTweetId = rootTweetId;
 
-        // 3. ツリー投稿（スレッド）があれば順次ぶら下げていく
-        if (post.threadContents) {
+        // 3. ツリー投稿（スレッド）を投稿時にぶら下げる
+        //    threadStyle によって「いつ」ぶら下げるかを切り替える:
+        //      - "chain" (デフォルト): 今すぐリプ連鎖で全てぶら下げる
+        //      - "impression_triggered": ここでは送らず、cron が元ポストの impression 到達を検知した時点で送る
+        const threadStyle = post.threadStyle === "impression_triggered" ? "impression_triggered" : "chain";
+        if (post.threadContents && threadStyle === "chain") {
             try {
                 const threads = JSON.parse(post.threadContents);
                 if (Array.isArray(threads) && threads.length > 0) {
-                    console.log(`Publishing ${threads.length} thread posts...`);
+                    console.log(`Publishing ${threads.length} thread posts (chain)...`);
                     for (const text of threads) {
                         if (!text.trim()) continue;
 
                         // X APIのRateLimit対策で1アクション毎に1秒待つ
                         await new Promise(resolve => setTimeout(resolve, 1000));
 
-                        // 前回のツイートIDに対してリプライを送る形でツリー化する
                         const replyRes = await rwClient.v2.reply(text, lastTweetId);
                         lastTweetId = replyRes.data.id;
                     }
@@ -105,6 +108,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
                 // スレッド投稿のみ失敗した場合はメインエラーにはしない
             }
         }
+        // impression_triggered の場合はスレッドを保持したまま、cron/check-impressions に託す
 
         // 3. 成功した場合、DBのステータスとIDを更新
         const db = prisma as any;
