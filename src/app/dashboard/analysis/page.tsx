@@ -77,8 +77,10 @@ export default function AnalysisPage() {
     const [classifying, setClassifying] = useState(false);
     const [classifyResult, setClassifyResult] = useState<{ positive: number; negative: number; unanalyzed: number; total: number } | null>(null);
 
-    // サジェストごとの状態: { [index]: "pending" | "approving" | "approved" | "rejected" }
-    const [suggestionStatus, setSuggestionStatus] = useState<Record<number, "pending" | "approving" | "approved" | "rejected">>({});
+    // サジェストごとの状態: { [index]: "pending" | "approving" | "approved" | "unapproving" | "rejected" }
+    const [suggestionStatus, setSuggestionStatus] = useState<Record<number, "pending" | "approving" | "approved" | "unapproving" | "rejected">>({});
+    // 承認後の Knowledge.id を覚えておく（取り消し時に DELETE する）
+    const [approvedKnowledgeId, setApprovedKnowledgeId] = useState<Record<number, string>>({});
     // 編集モード用
     const [editingSuggestion, setEditingSuggestion] = useState<number | null>(null);
     const [editedContent, setEditedContent] = useState<string>("");
@@ -104,6 +106,7 @@ export default function AnalysisPage() {
     const runInsight = async () => {
         setInsightLoading(true);
         setSuggestionStatus({});
+        setApprovedKnowledgeId({});
         setEditingSuggestion(null);
         try {
             const res = await fetch("/api/analysis/insight", {
@@ -160,6 +163,11 @@ export default function AnalysisPage() {
                 }),
             });
             if (res.ok) {
+                // 取り消しに使うため Knowledge.id を保持
+                const created = await res.json().catch(() => null) as { id?: string } | null;
+                if (created?.id) {
+                    setApprovedKnowledgeId(prev => ({ ...prev, [index]: created.id! }));
+                }
                 setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
                 setEditingSuggestion(null);
             } else {
@@ -169,6 +177,38 @@ export default function AnalysisPage() {
         } catch (e) {
             console.error(e);
             setSuggestionStatus(prev => ({ ...prev, [index]: "pending" }));
+        }
+    };
+
+    // 直前に承認したナレッジを取り消す（DELETE /api/knowledge/[id]）。
+    // approvedKnowledgeId に id がある場合のみ実行可能。同じ index で再度承認したい場合に「取り消す」ことで pending に戻せる。
+    const unapproveSuggestion = async (index: number) => {
+        const knowledgeId = approvedKnowledgeId[index];
+        if (!knowledgeId) {
+            // 何らかの理由で id 未取得のとき: 安全のため何もしない（ナレッジベース画面で削除を促す）
+            alert("この提案の Knowledge ID が記録されていないため、画面上での取り消しはできません。\n「ナレッジベース」画面から直接削除してください。");
+            return;
+        }
+        if (!confirm("このナレッジを削除して『未承認』に戻します。よろしいですか？")) return;
+
+        setSuggestionStatus(prev => ({ ...prev, [index]: "unapproving" }));
+        try {
+            const res = await fetch(`/api/knowledge/${knowledgeId}`, { method: "DELETE" });
+            if (res.ok) {
+                setSuggestionStatus(prev => ({ ...prev, [index]: "pending" }));
+                setApprovedKnowledgeId(prev => {
+                    const next = { ...prev };
+                    delete next[index];
+                    return next;
+                });
+            } else {
+                setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
+                alert("取り消しに失敗しました。再度お試しください。");
+            }
+        } catch (e) {
+            console.error("unapprove failed:", e);
+            setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
+            alert("取り消し中にエラーが発生しました。");
         }
     };
 
@@ -643,6 +683,25 @@ export default function AnalysisPage() {
                                             {status === "approving" && (
                                                 <div className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
                                                     <Loader2 className="size-3 animate-spin" /> 追加中...
+                                                </div>
+                                            )}
+                                            {status === "approved" && (
+                                                <div className="flex gap-2 flex-wrap mt-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => unapproveSuggestion(i)}
+                                                        className="text-slate-500 hover:text-rose-600 h-8 text-xs"
+                                                        disabled={!approvedKnowledgeId[i]}
+                                                        title={approvedKnowledgeId[i] ? "" : "Knowledge ID が記録されていないため、ナレッジベース画面で削除してください"}
+                                                    >
+                                                        ↩ ナレッジから取り消す
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            {status === "unapproving" && (
+                                                <div className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
+                                                    <Loader2 className="size-3 animate-spin" /> 取り消し中...
                                                 </div>
                                             )}
                                         </div>
