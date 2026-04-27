@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { toast } from "sonner";
 
 export default function MediaLibraryPage() {
     const [mediaItems, setMediaItems] = useState<any[]>([]);
@@ -47,16 +48,20 @@ export default function MediaLibraryPage() {
 
                 if (!res.ok) {
                     const errorData = await res.json();
-                    alert(`アップロード失敗: ${errorData.message}\n${errorData.details || ""}`);
+                    toast.error("アップロード失敗", {
+                        description: `${errorData.message}${errorData.details ? `\n${errorData.details}` : ""}`,
+                    });
                     break; // 容量制限などで失敗した場合はループを抜ける
                 }
             }
             // リストと容量を再取得
             await fetchMedia();
-            alert("アップロードが完了しました。");
+            toast.success("アップロードが完了しました");
         } catch (error) {
             console.error("Upload error:", error);
-            alert("エラーが発生しました。");
+            toast.error("エラーが発生しました", {
+                description: error instanceof Error ? error.message : undefined,
+            });
         } finally {
             setUploading(false);
             e.target.value = "";
@@ -165,7 +170,7 @@ export default function MediaLibraryPage() {
                                         className="text-xs"
                                         onClick={() => {
                                             navigator.clipboard.writeText(item.url);
-                                            alert("URLをコピーしました！");
+                                            toast.success("URLをコピーしました", { duration: 1500 });
                                         }}
                                     >
                                         🔗 コピー
