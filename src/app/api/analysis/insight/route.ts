@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
+import { suggestionHash } from "@/lib/analysis-hash";
 
 // Claude / OpenAI を使って「直近 N 日のパフォーマンス」を自然言語で要約・助言する。
 // 出力は JSON: { headline, what_worked, what_didnt, next_moves: string[], tldr }
@@ -218,7 +219,7 @@ export async function POST(req: Request) {
         // suggestions の正規化
         const allowedTypes = new Set(["BASE", "TEMPLATE", "WINNING", "LOSING"]);
         const rawSuggestions: SuggestionIn[] = Array.isArray(parsed?.suggestions) ? parsed!.suggestions : [];
-        const suggestions = rawSuggestions
+        const normalizedSuggestions = rawSuggestions
             .filter(s => typeof s.content === "string" && s.content.trim().length > 0)
             .map(s => {
                 const typeUpper = (s.type || "").toUpperCase();
@@ -231,6 +232,36 @@ export async function POST(req: Request) {
                     caveat: typeof s.caveat === "string" && s.caveat.trim().length > 0 ? s.caveat.trim() : null,
                 };
             });
+
+        // 過去に却下した提案をハッシュ一致で除外（再生成のたびに同じ提案が出続けるのを防ぐ）
+        let suggestions = normalizedSuggestions;
+        let suppressedRejected = 0;
+        if (normalizedSuggestions.length > 0) {
+            const candidateHashes = normalizedSuggestions.map(s => suggestionHash({ content: s.content, type: s.type, level: s.level }));
+            const db = prisma as unknown as {
+                rejectedSuggestion: {
+                    findMany: (args: { where: unknown; select?: unknown }) => Promise<Array<{ contentHash: string }>>;
+                };
+            };
+            try {
+                const rejectedRows = await db.rejectedSuggestion.findMany({
+                    where: { userId: user.id, contentHash: { in: candidateHashes } },
+                    select: { contentHash: true },
+                });
+                if (rejectedRows.length > 0) {
+                    const rejectedSet = new Set(rejectedRows.map(r => r.contentHash));
+                    const before = normalizedSuggestions.length;
+                    suggestions = normalizedSuggestions.filter((s) => {
+                        const h = suggestionHash({ content: s.content, type: s.type, level: s.level });
+                        return !rejectedSet.has(h);
+                    });
+                    suppressedRejected = before - suggestions.length;
+                }
+            } catch (e) {
+                // 万一テーブル未マイグレ等で失敗してもインサイト本体は壊さない
+                console.warn("rejectedSuggestion lookup failed (insight will still return suggestions):", e);
+            }
+        }
 
         const parseFailed = !parsed;
         return NextResponse.json({
@@ -247,6 +278,7 @@ export async function POST(req: Request) {
                 engine: `${provider.name}:${provider.model}`,
                 posts_analyzed: pastPosts.length,
                 funnel_events: funnelEvents.length,
+                suppressed_rejected: suppressedRejected,
             },
             _parseFailed: parseFailed,
             _rawPreview: parseFailed ? rawText.slice(0, 500) : undefined,

@@ -172,8 +172,40 @@ export default function AnalysisPage() {
         }
     };
 
-    const rejectSuggestion = (index: number) => {
+    const rejectSuggestion = async (index: number) => {
+        if (!insight?.suggestions) return;
+        const s = insight.suggestions[index];
+        if (!s) return;
+
+        // 楽観的に UI を「却下」表示にしてから永続化。失敗したら戻す。
         setSuggestionStatus(prev => ({ ...prev, [index]: "rejected" }));
+        try {
+            const res = await fetch("/api/analysis/reject", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: s.content,
+                    type: s.type,
+                    level: s.level,
+                }),
+            });
+            if (!res.ok) {
+                setSuggestionStatus(prev => {
+                    const next = { ...prev };
+                    delete next[index];
+                    return next;
+                });
+                alert("却下の保存に失敗しました。再度お試しください。");
+            }
+        } catch (e) {
+            console.error("reject persistence failed:", e);
+            setSuggestionStatus(prev => {
+                const next = { ...prev };
+                delete next[index];
+                return next;
+            });
+            alert("却下の保存中にエラーが発生しました。");
+        }
     };
 
     const startEditSuggestion = (index: number, content: string) => {

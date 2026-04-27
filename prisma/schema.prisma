@@ -27,6 +27,7 @@ model User {
   funnelEvents  FunnelEvent[] // プロラインフリー等の外部フォーム登録イベント
   replyEngagementTargets     ReplyEngagementTarget[]     // リプ回り半自動化のターゲットアカウント
   replyEngagementSuggestions ReplyEngagementSuggestion[] // 生成されたリプ案の履歴
+  rejectedSuggestions        RejectedSuggestion[]        // analysis画面で却下したAI提案（再表示抑制）
 
   // サブスクリプション・ストレージ管理
   plan          String   @default("FREE") // FREE, STANDARD, PRO
@@ -357,4 +358,23 @@ model ApiUsageLog {
 
   @@index([userId, createdAt])
   @@index([userId, provider, createdAt])
+}
+
+// analysis画面の AI 提案 (`/api/analysis/insight` の suggestions[]) を「却下」したときに記録するテーブル。
+// 以後の insight 取得時に同じ提案（contentHash 一致）を結果から除外することで、何度も同じ提案が出続けるのを防ぐ。
+// AI は毎回新規生成するので、安定した識別子として content+type+level の SHA256 を使う。
+model RejectedSuggestion {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  contentHash    String   // sha256(normalize(content) + "\u0000" + type + "\u0000" + level)
+  contentSnippet String   // 先頭200字。デバッグ用 / UI で「却下したルール一覧」を将来出すため
+  type           String   // "BASE" | "TEMPLATE" | "WINNING" | "LOSING"
+  level          String   // "tactic" | "strategy"
+
+  rejectedAt     DateTime @default(now())
+
+  @@unique([userId, contentHash])
+  @@index([userId, rejectedAt])
 }
