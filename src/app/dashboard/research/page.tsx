@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Search, Zap, CheckCircle2, Copy, Sparkles, AtSign, ShieldAlert, Heart, Repeat, MessageCircle, Quote, ExternalLink, Wand2, Pencil, Save, X, CalendarPlus } from "lucide-react";
+import { Loader2, Search, Zap, CheckCircle2, Copy, Sparkles, AtSign, ShieldAlert, Heart, Repeat, MessageCircle, Quote, ExternalLink, Wand2, Pencil, Save, X, CalendarPlus, BookmarkPlus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 type FetchedPost = {
     text: string;
@@ -65,6 +66,10 @@ export default function ResearchPage() {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editDraft, setEditDraft] = useState<string>("");
     const [savingToSchedulerIdx, setSavingToSchedulerIdx] = useState<number | null>(null);
+
+    // テンプレート（投稿の型）保存の状態。new result が来たらリセットされる。
+    const [templateSaveStatus, setTemplateSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+    const [savedTemplateKnowledgeId, setSavedTemplateKnowledgeId] = useState<string | null>(null);
 
     // 1. AIおまかせリサーチ
     const handleAIAutoResearch = async () => {
@@ -138,6 +143,9 @@ export default function ResearchPage() {
         try {
             setIsGenerating(true);
             setResult(null);
+            // 新しい結果が来るので、前回の保存状態をリセット
+            setTemplateSaveStatus("idle");
+            setSavedTemplateKnowledgeId(null);
 
             const res = await fetch(endpoint, {
                 method: "POST",
@@ -158,6 +166,82 @@ export default function ResearchPage() {
             alert(`エラーが発生しました: ${msg}`);
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    // 抽出したテンプレートを「投稿の型」(Knowledge.type=TEMPLATE) として保存。
+    // プレースホルダ・感情ベクトル・型の説明も合わせて 1 ナレッジに格納し、後で投稿生成AIが参照できるようにする。
+    const handleSaveTemplateAsKnowledge = async () => {
+        if (!result?.template) return;
+        setTemplateSaveStatus("saving");
+        try {
+            const lines: string[] = [result.template.trim()];
+            if (result.placeholders && result.placeholders.length > 0) {
+                lines.push("", "【プレースホルダ】");
+                for (const p of result.placeholders) {
+                    lines.push(`- ${p.key}: ${p.meaning}`);
+                }
+            }
+            if (result.extracted_format) {
+                lines.push("", `【投稿の型】 ${result.extracted_format}`);
+            }
+            if (result.extracted_emotion) {
+                lines.push(`【感情ベクトル】 ${result.extracted_emotion}`);
+            }
+
+            // 元投稿の出所を source に残す（@username があればそれ、無ければ手動入力テキスト）
+            const sourceLabel = fetchedPost?.author?.username
+                ? `モデリング元: @${fetchedPost.author.username} の投稿`
+                : "モデリング元: 手動入力テキスト";
+
+            const res = await fetch("/api/knowledge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    type: "TEMPLATE",
+                    category: "リサーチから抽出",
+                    content: lines.join("\n"),
+                    source: sourceLabel,
+                }),
+            });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "保存に失敗しました");
+            }
+            const created = await res.json() as { id?: string };
+            if (created?.id) setSavedTemplateKnowledgeId(created.id);
+            setTemplateSaveStatus("saved");
+            toast.success("投稿の型としてナレッジに保存しました", {
+                description: "ナレッジベース → 投稿の型 から確認できます",
+            });
+        } catch (error: unknown) {
+            console.error(error);
+            const msg = error instanceof Error ? error.message : String(error);
+            setTemplateSaveStatus("error");
+            toast.error("保存に失敗しました", { description: msg });
+        }
+    };
+
+    // 直前に保存したテンプレートをナレッジから削除する（取り消し）
+    const handleUnsaveTemplate = async () => {
+        if (!savedTemplateKnowledgeId) return;
+        if (!confirm("このテンプレートをナレッジから削除して『未保存』に戻します。よろしいですか？")) return;
+        const previousId = savedTemplateKnowledgeId;
+        setTemplateSaveStatus("saving");
+        try {
+            const res = await fetch(`/api/knowledge/${previousId}`, { method: "DELETE" });
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "取り消しに失敗しました");
+            }
+            setTemplateSaveStatus("idle");
+            setSavedTemplateKnowledgeId(null);
+            toast.success("ナレッジから削除しました");
+        } catch (error: unknown) {
+            console.error(error);
+            const msg = error instanceof Error ? error.message : String(error);
+            setTemplateSaveStatus("saved"); // 戻す
+            toast.error("取り消しに失敗しました", { description: msg });
         }
     };
 
@@ -555,7 +639,40 @@ export default function ResearchPage() {
                                     {/* テンプレート（プレースホルダ可視化）*/}
                                     {result.template && (
                                         <div className="pt-3 border-t border-slate-200">
-                                            <h4 className="text-sm font-bold text-slate-700 mb-2">🧩 抽出したテンプレート（ここに穴埋めされました）</h4>
+                                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                                                <h4 className="text-sm font-bold text-slate-700">🧩 抽出したテンプレート（ここに穴埋めされました）</h4>
+                                                {templateSaveStatus === "saved" ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge className="bg-emerald-600 text-white text-[10px]">
+                                                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                                                            投稿の型に保存済
+                                                        </Badge>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={handleUnsaveTemplate}
+                                                            disabled={!savedTemplateKnowledgeId}
+                                                            className="h-7 text-xs text-slate-500 hover:text-rose-600"
+                                                            title={savedTemplateKnowledgeId ? "保存したナレッジを削除します" : "Knowledge ID 不明のため取り消し不可"}
+                                                        >
+                                                            ↩ 取り消す
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={handleSaveTemplateAsKnowledge}
+                                                        disabled={templateSaveStatus === "saving"}
+                                                        className="h-8 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+                                                    >
+                                                        {templateSaveStatus === "saving" ? (
+                                                            <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> 保存中...</>
+                                                        ) : (
+                                                            <><BookmarkPlus className="w-3 h-3 mr-1" /> 投稿の型として保存</>
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </div>
                                             <div className="p-3 bg-violet-50 border border-violet-200 rounded-md text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-mono">
                                                 {result.template}
                                             </div>
