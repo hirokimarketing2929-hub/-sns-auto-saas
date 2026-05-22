@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { TwitterApi } from "twitter-api-v2";
+import { getTwitterClient } from "@/lib/twitter";
 
 export async function GET(req: Request) {
     // Vercel Cron / 手動トリガーのみ許可
@@ -15,8 +15,7 @@ export async function GET(req: Request) {
         const now = new Date();
 
         // SCHEDULEDステータスで、scheduledAtが現在時刻以前の投稿を取得
-        // TODO: cron — 後日 multi-account 対応。各 Post には既に xAccountId が紐付くため
-        //   今は userId 単位で動かす（投稿ごとの xAccount に応じた OAuth クライアント切替は将来改善）。
+        // multi-account 対応: 各 Post の xAccountId に応じて getTwitterClient で正しい認証を解決する
         const postsToPublish = await prisma.post.findMany({
             where: {
                 status: "SCHEDULED",
@@ -24,14 +23,6 @@ export async function GET(req: Request) {
                     lte: now
                 }
             },
-            include: {
-                user: {
-                    include: {
-                        settings: true,
-                        accounts: true
-                    }
-                }
-            }
         });
 
         console.log(`Found ${postsToPublish.length} posts to publish.`);
@@ -40,42 +31,19 @@ export async function GET(req: Request) {
 
         for (const post of postsToPublish) {
             try {
-                const user = post.user;
-                const settings = user.settings;
-
-                if (!settings) {
-                    throw new Error("ユーザー設定が見つかりません");
-                }
-
-                let twitterClient: TwitterApi | null = null;
-
-                // --- X API クライアント初期化 (posts/[id]/publish/route.ts と同等) ---
-                if (settings.xAccessToken && settings.xAccessSecret) {
-                    twitterClient = new TwitterApi({
-                        appKey: settings.xApiKey || "",
-                        appSecret: settings.xApiSecret || "",
-                        accessToken: settings.xAccessToken,
-                        accessSecret: settings.xAccessSecret,
-                    });
-                } else if (user.accounts && user.accounts.length > 0) {
-                    const twitterAccount = user.accounts.find((a: { provider: string }) => a.provider === "twitter");
-                    if (twitterAccount && twitterAccount.access_token) {
-                        twitterClient = new TwitterApi(twitterAccount.access_token);
-                    }
-                }
-
-                if (!twitterClient) {
-                    throw new Error("X API連携設定がないため投稿できません。");
-                }
+                // 投稿に紐づくサブアカウント(xAccountId)の認証で投稿する（手動投稿と同じ getTwitterClient 経由）。
+                // BYOK / OAuth の判定とトークンリフレッシュを内部で行う。
+                const twitterClient = await getTwitterClient(post.userId, post.xAccountId ?? undefined);
 
                 let mediaIds: string[] = [];
                 const attachedImages = post.mediaUrls ? JSON.parse(post.mediaUrls) : [];
 
                 // 1. 画像アップロード処理
                 if (attachedImages.length > 0) {
+                    const baseUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
                     for (const url of attachedImages) {
                         try {
-                            const absoluteUrl = url.startsWith('http') ? url : `http://localhost:3000${url}`;
+                            const absoluteUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
                             const imgRes = await fetch(absoluteUrl);
                             if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.statusText}`);
 

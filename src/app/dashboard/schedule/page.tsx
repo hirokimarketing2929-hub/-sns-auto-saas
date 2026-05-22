@@ -334,13 +334,13 @@ export default function SchedulePage() {
                                     )}
 
                                     {/* 添付画像の表示（編集モードでは表示のみ。差し替えは今回スコープ外） */}
-                                    {post.mediaUrls && JSON.parse(post.mediaUrls).length > 0 && (
+                                    {parseThreadContents(post.mediaUrls).length > 0 && (
                                         <div>
                                             {isEditing && (
                                                 <label className="text-xs font-semibold text-muted-foreground">添付画像（編集不可）</label>
                                             )}
                                             <div className="flex flex-wrap gap-2 mt-2">
-                                                {JSON.parse(post.mediaUrls).map((url: string, i: number) => (
+                                                {parseThreadContents(post.mediaUrls).map((url: string, i: number) => (
                                                     <div key={i} className="w-24 h-24 border border-white/10 rounded-md overflow-hidden bg-white/5 shrink-0">
                                                         <img src={url} alt={`media-${i}`} className="object-cover w-full h-full" />
                                                     </div>
@@ -455,7 +455,7 @@ export default function SchedulePage() {
                                             ))}
                                         </div>
                                     ) : (
-                                        post.threadContents && JSON.parse(post.threadContents).length > 0 && (
+                                        parseThreadContents(post.threadContents).length > 0 && (
                                             <div className="pl-4 border-l-2 border-purple-500/30 space-y-2">
                                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                                     <p className="text-xs font-bold text-purple-400">🌲 続くスレッド投稿</p>
@@ -465,7 +465,7 @@ export default function SchedulePage() {
                                                         {post.threadStyle === "impression_triggered" ? "📈 一定インプ達成後に送信" : "🔗 投稿時に即リプ連鎖"}
                                                     </Badge>
                                                 </div>
-                                                {JSON.parse(post.threadContents).map((t: string, i: number) => (
+                                                {parseThreadContents(post.threadContents).map((t: string, i: number) => (
                                                     <div key={i} className="bg-white/5 p-3 rounded-md border border-white/10 text-sm text-foreground/80 whitespace-pre-wrap">
                                                         <span className="text-purple-400 font-bold mr-2">#{i + 2}</span>{t}
                                                     </div>
