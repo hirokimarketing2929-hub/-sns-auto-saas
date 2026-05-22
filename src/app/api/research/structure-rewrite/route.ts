@@ -506,11 +506,14 @@ export async function POST(req: Request) {
         }
         console.log(`[structure-rewrite] provider resolved: ${providerSource}, user-anthropic-len: ${settings.anthropicApiKey?.length ?? 0}, user-openai-len: ${settings.openaiApiKey?.length ?? 0}, env-anthropic: ${process.env.ANTHROPIC_API_KEY ? "set" : "unset"}`);
 
+        // ペルソナ反映はオプトイン（applyPersonaToGeneration）。OFF時はターゲット/悩み/コンセプト/プロフィールを
+        // 空にして特定ペルソナに寄せず、元バズ投稿の構造をそのまま活かす（CTA URL はリンクなので常に保持）。
+        const usePersona = !!(xAccount as any).applyPersonaToGeneration;
         const persona: Persona = {
-            target_audience: xAccount.targetAudience || "",
-            target_pain: xAccount.targetPain || "",
-            account_concept: xAccount.accountConcept || "",
-            profile: xAccount.profile || "",
+            target_audience: usePersona ? (xAccount.targetAudience || "") : "",
+            target_pain: usePersona ? (xAccount.targetPain || "") : "",
+            account_concept: usePersona ? (xAccount.accountConcept || "") : "",
+            profile: usePersona ? (xAccount.profile || "") : "",
             cta_url: xAccount.ctaUrl || "",
         };
 

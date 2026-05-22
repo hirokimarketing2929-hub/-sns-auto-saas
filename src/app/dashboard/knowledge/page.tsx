@@ -26,9 +26,11 @@ export default function KnowledgePage() {
         ctaUrl: "",
         accountConcept: "",
         profile: "",
+        applyPersonaToGeneration: false,
     });
     const [loadingAccount, setLoadingAccount] = useState(true);
     const [savingAccount, setSavingAccount] = useState(false);
+    const [accountDirty, setAccountDirty] = useState(false); // 未保存の変更があるか
     const [accountMsg, setAccountMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
     // ナレッジ行ごとの三点リーダーメニュー
@@ -67,7 +69,9 @@ export default function KnowledgePage() {
                     ctaUrl: data.ctaUrl || "",
                     accountConcept: data.accountConcept || "",
                     profile: data.profile || "",
+                    applyPersonaToGeneration: !!data.applyPersonaToGeneration,
                 });
+                setAccountDirty(false); // 取得直後は未保存変更なし
             }
         } catch (error) {
             console.error("Failed to fetch account settings:", error);
@@ -79,6 +83,13 @@ export default function KnowledgePage() {
     const handleAccountChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setAccountForm(prev => ({ ...prev, [name]: value }));
+        setAccountDirty(true);
+    };
+
+    const handlePersonaToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const checked = e.target.checked;
+        setAccountForm(prev => ({ ...prev, applyPersonaToGeneration: checked }));
+        setAccountDirty(true);
     };
 
     const handleSaveAccount = async () => {
@@ -92,6 +103,7 @@ export default function KnowledgePage() {
             });
             if (res.ok) {
                 setAccountMsg({ text: "運用設定を保存しました。", type: "success" });
+                setAccountDirty(false); // 保存完了で未保存表示を消す
             } else {
                 setAccountMsg({ text: "保存に失敗しました。", type: "error" });
             }
@@ -440,14 +452,38 @@ export default function KnowledgePage() {
                                     className="w-full h-10 border border-input bg-background px-3 py-2 text-sm rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                 />
                             </div>
+                            {/* ペルソナ反映オプトイン（デフォルトOFF＝バズ優先） */}
+                            <label className="flex items-start gap-3 p-3 rounded-md border border-white/10 bg-white/5 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={accountForm.applyPersonaToGeneration}
+                                    onChange={handlePersonaToggle}
+                                    disabled={savingAccount}
+                                    className="mt-0.5 h-4 w-4 accent-purple-500"
+                                />
+                                <span className="text-sm">
+                                    <span className="font-medium text-foreground/90">このペルソナを投稿生成に反映する</span>
+                                    <span className="block text-xs text-muted-foreground mt-0.5">
+                                        OFF（推奨・初期値）の場合は特定ペルソナに寄せず、幅広く刺さるバズ優先の生成をします。ONにすると上記のターゲット・悩み・コンセプトを生成に反映します。
+                                    </span>
+                                </span>
+                            </label>
+
                             {accountMsg && (
                                 <div className={`p-3 rounded-md text-sm ${accountMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
                                     {accountMsg.text}
                                 </div>
                             )}
-                            <Button onClick={handleSaveAccount} disabled={savingAccount}>
-                                {savingAccount ? "保存中..." : "設定を保存"}
-                            </Button>
+                            <div className="flex items-center gap-3">
+                                <Button onClick={handleSaveAccount} disabled={savingAccount}>
+                                    {savingAccount ? "保存中..." : "設定を保存"}
+                                </Button>
+                                {accountDirty && (
+                                    <span className="text-sm text-amber-500 font-medium flex items-center gap-1">
+                                        ⚠️ まだ保存されていません
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     )}
                 </CardContent>
