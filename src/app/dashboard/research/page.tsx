@@ -47,7 +47,7 @@ type RepurposeResult = {
 };
 
 export default function ResearchPage() {
-    const [activeTab, setActiveTab] = useState<"ai" | "target" | "manual">("ai");
+    const [activeTab, setActiveTab] = useState<"target" | "manual">("target");
     const [isGenerating, setIsGenerating] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
     const [result, setResult] = useState<RepurposeResult | null>(null);
@@ -71,13 +71,7 @@ export default function ResearchPage() {
     const [templateSaveStatus, setTemplateSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
     const [savedTemplateKnowledgeId, setSavedTemplateKnowledgeId] = useState<string | null>(null);
 
-    // 1. AIおまかせリサーチ
-    const handleAIAutoResearch = async () => {
-        setFetchedPost(null);
-        await executeRepurposeRequest("/api/research/auto_ai", {});
-    };
-
-    // 2a. @username または URL → ポスト取得のみ
+    // @username または URL → ポスト取得のみ
     const handleFetchPost = async () => {
         const v = targetInput.trim();
         if (!v) {
@@ -313,8 +307,7 @@ export default function ResearchPage() {
         }
     };
 
-    const tabs: { id: "ai" | "target" | "manual"; label: string; Icon: typeof Sparkles }[] = [
-        { id: "ai", label: "🤖 AIおまかせ提案", Icon: Sparkles },
+    const tabs: { id: "target" | "manual"; label: string; Icon: typeof AtSign }[] = [
         { id: "target", label: "🔍 @username / URL から取得", Icon: AtSign },
         { id: "manual", label: "✍️ 手動入力", Icon: Search },
     ];
@@ -353,39 +346,6 @@ export default function ResearchPage() {
 
                 {/* 動的入力エリア */}
                 <div className="space-y-6">
-                    {activeTab === "ai" && (
-                        <Card className="border-blue-200 shadow-sm bg-white">
-                            <CardHeader>
-                                <CardTitle className="text-xl flex items-center gap-2 text-slate-900">
-                                    <Sparkles className="w-5 h-5 text-blue-500" />
-                                    ゼロベース AIおまかせリサーチ
-                                </CardTitle>
-                                <CardDescription className="text-slate-600">
-                                    AI自身が持つ「普遍的にバズりやすい無数の型と感情ベクトル」から、今の自社ターゲットに最も刺さる型を自動で選び、投稿案を直クラフトします。
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-4 pb-8 pt-2">
-                                <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100">
-                                    <p className="text-sm text-slate-700 font-medium mb-4 text-center">
-                                        💡 リサーチ不要。ボタンを押すだけで AI が 3つの投稿案を生成します。
-                                    </p>
-                                    <Button
-                                        onClick={handleAIAutoResearch}
-                                        disabled={isGenerating}
-                                        size="lg"
-                                        className="w-full h-16 text-lg font-bold rounded-xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                                    >
-                                        {isGenerating ? (
-                                            <><Loader2 className="mr-2 h-6 w-6 animate-spin" /> 脳内リサーチ＆生成中...</>
-                                        ) : (
-                                            <><Zap className="mr-2 h-6 w-6" /> AIに最強のポスト案を3つ作らせる</>
-                                        )}
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
                     {activeTab === "target" && (
                         <Card className="border-sky-200 shadow-sm bg-white">
                             <CardHeader>
