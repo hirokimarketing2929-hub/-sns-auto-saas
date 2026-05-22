@@ -2,7 +2,20 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccount } from "@/lib/active-x-account";
 import { TwitterApi } from "twitter-api-v2";
+
+// アカウント別に持つフィールド（アクティブな XAccount に読み書きする）。
+// これらを Settings ではなく XAccount に保存することで、投稿生成（generate / structure-rewrite）が
+// 参照する XAccount と保存先が一致し、「設定したのに反映されない」問題を解消する。
+const PERSONA_FIELDS = [
+    "targetAudience",
+    "targetPain",
+    "ctaUrl",
+    "accountConcept",
+    "profile",
+    "applyPersonaToGeneration",
+] as const;
 
 export async function GET() {
     const session = await getServerSession(authOptions);
@@ -32,18 +45,25 @@ export async function GET() {
             }));
         const hasTwitterOAuth = twitterAccounts.length > 0;
 
-        // 設定がない場合はデフォルト値を返す
-        if (!user.settings) {
-            const defaultSettings = await prisma.settings.create({
-                data: {
-                    userId: user.id
-                }
-            });
-            return NextResponse.json({ ...defaultSettings, hasTwitterOAuth, twitterAccounts });
+        // アクティブなサブアカウントのペルソナ設定（アカウント別）を取得
+        const activeXAccount = await getActiveXAccount(user.id).catch(() => null);
+
+        // 共通設定（Settings）。無ければデフォルト作成
+        const settings = user.settings ?? await prisma.settings.create({ data: { userId: user.id } });
+
+        // ペルソナ系は active XAccount を正とし、共通設定にマージして返す（フロントのレスポンス形式は維持）
+        const personaOverrides: Record<string, unknown> = {};
+        if (activeXAccount) {
+            for (const f of PERSONA_FIELDS) personaOverrides[f] = (activeXAccount as any)[f];
         }
 
-        // anyキャストでTypeScriptエラーを回避しつつhasTwitterOAuth/twitterAccountsを追加
-        const responseData = { ...(user.settings as any), hasTwitterOAuth, twitterAccounts };
+        const responseData = {
+            ...(settings as any),
+            ...personaOverrides,
+            activeXAccountId: activeXAccount?.id ?? null,
+            hasTwitterOAuth,
+            twitterAccounts,
+        };
         return NextResponse.json(responseData);
     } catch (error) {
         console.error("Settings GET error:", error);
@@ -70,14 +90,25 @@ export async function PUT(req: Request) {
 
         // 部分更新対応：リクエストに含まれたフィールドのみを書き込む（未送信のフィールドは保持）
         const has = (key: string) => Object.prototype.hasOwnProperty.call(data, key);
-        const updateFields: Record<string, unknown> = {};
 
+        // ペルソナ系（アカウント別）は active XAccount に書き込む
+        const personaUpdate: Record<string, unknown> = {};
+        for (const key of PERSONA_FIELDS) {
+            if (has(key)) personaUpdate[key] = data[key];
+        }
+        if (Object.keys(personaUpdate).length > 0) {
+            const activeXAccount = await getActiveXAccount(user.id).catch(() => null);
+            if (activeXAccount) {
+                await prisma.xAccount.update({
+                    where: { id: activeXAccount.id },
+                    data: personaUpdate,
+                });
+            }
+        }
+
+        // 共通設定（Settings）に書き込むフィールド
+        const updateFields: Record<string, unknown> = {};
         for (const key of [
-            "targetAudience",
-            "targetPain",
-            "ctaUrl",
-            "accountConcept",
-            "profile",
             "xApiKey",
             "xApiSecret",
             "xAccessToken",

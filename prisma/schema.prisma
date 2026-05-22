@@ -80,6 +80,12 @@ model XAccount {
   competitor1          String?
   competitor2          String?
 
+  // ペルソナを投稿生成に反映するか（オプトイン。デフォルト false = バズ優先で汎用生成）
+  applyPersonaToGeneration Boolean @default(false)
+
+  // ChatWork 送信先ルームID（アカウント別。トークンは Settings 側で共通管理）
+  chatworkRoomId       String?
+
   // 外部ツール連携（アカウント別 — Settings から移動）
   spreadsheetUrl       String?
 
