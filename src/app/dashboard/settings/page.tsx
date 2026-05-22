@@ -227,6 +227,15 @@ export default function SettingsPage() {
                     X (Twitter) の自動投稿用 API キーと、外部ツール連携のエンドポイントを管理します。<br />
                     ※ AIペルソナ・運用方針などの設定は「ナレッジベース」画面に移動しました。
                 </p>
+                {/* 共通 / アカウント別 の凡例 */}
+                <div className="mt-3 flex flex-col sm:flex-row gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-300">
+                        🌐 全アカウント共通 — 一度設定すればすべてのアカウントで使われます
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300">
+                        👤 このアカウント専用 — 切り替え中のアカウントにのみ適用されます
+                    </span>
+                </div>
             </div>
 
             {/* サブアカウント管理 — 無制限に追加可能 */}
@@ -281,7 +290,9 @@ export default function SettingsPage() {
                         <form onSubmit={handleSubmit} className="space-y-6">
                             {/* 生成AI プロバイダ（Claude / OpenAI） */}
                             <div className="space-y-4">
-                                <h3 className="text-lg font-semibold">🤖 生成 AI プロバイダ API キー (BYOK)</h3>
+                                <h3 className="text-lg font-semibold">🤖 生成 AI プロバイダ API キー (BYOK)
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 align-middle">🌐 全アカ共通</span>
+                                </h3>
                                 <div className="bg-indigo-50 p-4 rounded-md border border-indigo-200">
                                     <p className="text-sm text-indigo-900 mb-1">
                                         リサーチ画面の「構造を保持してテーマ置換」機能で使用する LLM プロバイダの API キーを登録します。
@@ -330,7 +341,9 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="space-y-4 pt-4 border-t">
-                                <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)</h3>
+                                <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 align-middle">👤 このアカウント専用</span>
+                                </h3>
 
 
                                 <div className="bg-gray-50 p-4 rounded-md border mt-6">
@@ -387,7 +400,9 @@ export default function SettingsPage() {
 
                             {/* 外部ツール（スプレッドシート連携） */}
                             <div className="space-y-4 pt-4 border-t mt-6">
-                                <h3 className="text-lg font-semibold">外部連携 (スプレッドシート・GAS)</h3>
+                                <h3 className="text-lg font-semibold">外部連携 (スプレッドシート・GAS)
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 align-middle">👤 このアカウント専用</span>
+                                </h3>
                                 <div className="space-y-2">
                                     <Label htmlFor="spreadsheetUrl">スプレッドシートWebアプリ(GAS)のURL</Label>
                                     <Input
@@ -406,7 +421,9 @@ export default function SettingsPage() {
 
                             {/* プロラインフリー連携 webhook */}
                             <div className="space-y-4 pt-4 border-t mt-6">
-                                <h3 className="text-lg font-semibold">🧩 プロラインフリー 連携（導線分析）</h3>
+                                <h3 className="text-lg font-semibold">🧩 プロラインフリー 連携（導線分析）
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 align-middle">👤 このアカウント専用</span>
+                                </h3>
                                 <p className="text-xs text-muted-foreground -mt-2">
                                     プロラインの GAS（doPost）から、本 SaaS の webhook へフォーム登録データを転送することで、X投稿→LP→LINE登録 までの導線数値をダッシュボードで追えます。
                                 </p>
@@ -485,7 +502,10 @@ export default function SettingsPage() {
 
                             {/* ChatWork 連携（リプ周り半自動化） */}
                             <div className="space-y-4 pt-4 border-t mt-6">
-                                <h3 className="text-lg font-semibold">💬 ChatWork 連携（リプ周り半自動化）</h3>
+                                <h3 className="text-lg font-semibold">💬 ChatWork 連携（リプ周り半自動化）
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 align-middle">🌐 トークンは共通</span>
+                                </h3>
+                                <p className="text-[11px] text-amber-500/90 -mt-1">※ 送信先ルームIDのアカウント別設定は今後対応予定（現在は共通設定です）。</p>
                                 <p className="text-xs text-muted-foreground -mt-2">
                                     ターゲットアカウントの高インプ投稿が見つかった際に、該当 URL とコピペ用リプライ案 3 本を ChatWork のルームへ自動送信します。
                                 </p>

@@ -32,6 +32,10 @@ export default function XAccountManager() {
     const [newKeys, setNewKeys] = useState({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
     const [showKeys, setShowKeys] = useState(false);
 
+    // 既存アカウントへの後付けキー編集 state
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editKeys, setEditKeys] = useState({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
+
     useEffect(() => {
         load();
     }, []);
@@ -102,6 +106,40 @@ export default function XAccountManager() {
             setCreating(false);
             await load();
             setNotice({ type: "success", text: "サブアカウントを追加しました" });
+            router.refresh();
+        } finally {
+            setBusy(false);
+            setTimeout(() => setNotice(null), 2500);
+        }
+    }
+
+    function startEditKeys(id: string) {
+        setEditingId(prev => (prev === id ? null : id));
+        setEditKeys({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
+    }
+
+    async function saveKeys(id: string) {
+        if (!editKeys.xApiKey || !editKeys.xApiSecret || !editKeys.xAccessToken || !editKeys.xAccessSecret) {
+            setNotice({ type: "error", text: "4つのキーすべてを入力してください" });
+            setTimeout(() => setNotice(null), 2500);
+            return;
+        }
+        setBusy(true);
+        try {
+            const res = await fetch(`/api/x-accounts/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editKeys),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setNotice({ type: "error", text: d?.message || "APIキーの保存に失敗しました" });
+                return;
+            }
+            setEditingId(null);
+            setEditKeys({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
+            await load();
+            setNotice({ type: "success", text: "APIキーを紐付けました（X接続を確認済み）" });
             router.refresh();
         } finally {
             setBusy(false);
@@ -213,38 +251,74 @@ export default function XAccountManager() {
                 ) : (
                     list.map(a => {
                         const isActive = a.id === activeId;
+                        const isEditing = a.id === editingId;
                         return (
                             <div
                                 key={a.id}
-                                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${isActive ? "border-indigo-400 bg-indigo-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                                className={`rounded-lg border transition-colors ${isActive ? "border-indigo-400 bg-indigo-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
                             >
-                                {a.xProfileImageUrl ? (
-                                    <img src={a.xProfileImageUrl} alt="icon" className="w-10 h-10 rounded-full ring-1 ring-gray-200" />
-                                ) : (
-                                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">𝕏</div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-semibold truncate">{a.displayName}</span>
-                                        {isActive && <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full">ACTIVE</span>}
-                                        {a.hasOAuth && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">OAuth</span>}
-                                        {a.hasManualKeys && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">BYOK</span>}
-                                        {!a.hasOAuth && !a.hasManualKeys && <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">未連携</span>}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground truncate">
-                                        {a.xUsername || "—"}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {!isActive && (
-                                        <Button type="button" size="sm" variant="outline" onClick={() => setActive(a.id)} disabled={busy}>
-                                            切替
-                                        </Button>
+                                <div className="flex items-center gap-3 p-3">
+                                    {a.xProfileImageUrl ? (
+                                        <img src={a.xProfileImageUrl} alt="icon" className="w-10 h-10 rounded-full ring-1 ring-gray-200" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">𝕏</div>
                                     )}
-                                    <Button type="button" size="sm" variant="ghost" className="text-red-600" onClick={() => deleteAccount(a.id, a.displayName)} disabled={busy || list.length <= 1}>
-                                        削除
-                                    </Button>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-semibold truncate">{a.displayName}</span>
+                                            {isActive && <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full">ACTIVE</span>}
+                                            {a.hasOAuth && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">OAuth</span>}
+                                            {a.hasManualKeys && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">BYOK</span>}
+                                            {!a.hasOAuth && !a.hasManualKeys && <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">未連携</span>}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                            {a.xUsername || "—"}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {!isActive && (
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setActive(a.id)} disabled={busy}>
+                                                切替
+                                            </Button>
+                                        )}
+                                        <Button type="button" size="sm" variant="outline" onClick={() => startEditKeys(a.id)} disabled={busy}>
+                                            {isEditing ? "閉じる" : (a.hasManualKeys ? "キー再設定" : "キー設定")}
+                                        </Button>
+                                        <Button type="button" size="sm" variant="ghost" className="text-red-600" onClick={() => deleteAccount(a.id, a.displayName)} disabled={busy || list.length <= 1}>
+                                            削除
+                                        </Button>
+                                    </div>
                                 </div>
+
+                                {isEditing && (
+                                    <div className="border-t border-gray-200 p-3 bg-slate-50 space-y-3">
+                                        <p className="text-xs text-muted-foreground">
+                                            このアカウントに X(Twitter) の API キー（BYOK）を紐付けます。4つすべて入力して保存すると、X に接続して @ユーザー名 とアイコンを自動取得します。
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {(["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const).map(k => (
+                                                <div key={k} className="space-y-1">
+                                                    <Label htmlFor={`edit_${a.id}_${k}`} className="text-xs">{k}</Label>
+                                                    <Input
+                                                        id={`edit_${a.id}_${k}`}
+                                                        type="password"
+                                                        value={editKeys[k]}
+                                                        onChange={e => setEditKeys(p => ({ ...p, [k]: e.target.value }))}
+                                                        className="bg-white"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button type="button" size="sm" onClick={() => saveKeys(a.id)} disabled={busy}>
+                                                {busy ? "保存中..." : "キーを保存して接続確認"}
+                                            </Button>
+                                            <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={busy}>
+                                                キャンセル
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })
