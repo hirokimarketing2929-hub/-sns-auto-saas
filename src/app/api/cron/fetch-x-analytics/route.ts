@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { TwitterApi } from "twitter-api-v2";
-import { getActiveXAccountId } from "@/lib/active-x-account";
+import { getTwitterClient } from "@/lib/twitter";
 
 export async function GET(req: Request) {
     // 簡易的な認証（実運用では VERCEL_CRON_SECRET などを検証）
@@ -14,33 +13,30 @@ export async function GET(req: Request) {
     }
 
     try {
-        // XのAPIキー設定を持つユーザーのSettingsを取得
-        const settingsWithTwitter = await prisma.settings.findMany({
+        // multi-account 対応: BYOK または OAuth 連携を持つ全 XAccount を対象に同期する
+        const xAccounts = await prisma.xAccount.findMany({
             where: {
-                xApiKey: { not: null },
-                xApiSecret: { not: null },
-                xAccessToken: { not: null },
-                xAccessSecret: { not: null }
+                OR: [
+                    {
+                        AND: [
+                            { xApiKey: { not: null } },
+                            { xApiSecret: { not: null } },
+                            { xAccessToken: { not: null } },
+                            { xAccessSecret: { not: null } },
+                        ],
+                    },
+                    { oauthAccountId: { not: null } },
+                ],
             },
-            include: { user: true }
         });
 
         let updatedCount = 0;
 
-        // TODO: cron — 後日 multi-account 対応。現状は Settings 1件 = 1ユーザーで動かし、
-        //   PastPost には現在アクティブな xAccount を紐付ける（cookie が無いので User.activeXAccountId を採用）。
-        //   将来は user の全 XAccount をループする実装に変えること。
-        for (const settings of settingsWithTwitter) {
+        for (const xa of xAccounts) {
             try {
-                // Twitter API クライアント初期化 (OAuth 1.0a User Context)
-                const client = new TwitterApi({
-                    appKey: settings.xApiKey!,
-                    appSecret: settings.xApiSecret!,
-                    accessToken: settings.xAccessToken!,
-                    accessSecret: settings.xAccessSecret!,
-                });
-
-                const xAccountId = await getActiveXAccountId(settings.userId);
+                // xAccountId 固定で認証クライアントを取得（BYOK/OAuth 判定・トークンリフレッシュは内部処理）
+                const client = await getTwitterClient(xa.userId, xa.id);
+                const xAccountId = xa.id;
 
                 // Read Only (V2) クライアント
                 const roClient = client.readOnly;
@@ -55,7 +51,7 @@ export async function GET(req: Request) {
                     "tweet.fields": ["created_at", "public_metrics", "non_public_metrics"]
                 });
 
-                for (const tweet of tweets.data.data) {
+                for (const tweet of tweets.data.data ?? []) {
                     // オーガニックインプレッション（取得できない場合はパブリックからフォールバック）
                     const nonPublic = tweet.non_public_metrics;
                     const publicMetrics = tweet.public_metrics;
@@ -70,7 +66,7 @@ export async function GET(req: Request) {
                             // conversions: 将来的に連携先のクリック数を入れることも可能
                         },
                         create: {
-                            userId: settings.userId,
+                            userId: xa.userId,
                             xAccountId,
                             content: tweet.text,
                             platform: "X",
@@ -83,13 +79,13 @@ export async function GET(req: Request) {
                     updatedCount++;
                 }
             } catch (userErr) {
-                console.error(`Failed to fetch for user ${settings.userId}:`, userErr);
+                console.error(`Failed to fetch for xAccount ${xa.id} (user ${xa.userId}):`, userErr);
             }
         }
 
-        return NextResponse.json({ 
-            message: "X Analytics sync complete", 
-            processedUsers: settingsWithTwitter.length,
+        return NextResponse.json({
+            message: "X Analytics sync complete",
+            processedAccounts: xAccounts.length,
             updatedPosts: updatedCount
         });
 
