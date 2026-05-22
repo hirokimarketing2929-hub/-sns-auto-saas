@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     try {
@@ -17,6 +18,8 @@ export async function POST(req: Request) {
         if (!user) {
             return NextResponse.json({ message: "User not found" }, { status: 404 });
         }
+
+        const xAccountId = await getActiveXAccountId(user.id);
 
         // フロント側から送信されたFormDataの取得
         const formData = await req.formData();
@@ -64,6 +67,7 @@ export async function POST(req: Request) {
             const k = await prisma.knowledge.create({
                 data: {
                     userId: user.id,
+                    xAccountId,
                     content: item.content,
                     type: finalType,
                     category: item.category || "",

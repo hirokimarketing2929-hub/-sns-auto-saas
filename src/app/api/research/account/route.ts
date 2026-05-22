@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { TwitterApi } from "twitter-api-v2";
+import { getTwitterClient } from "@/lib/twitter";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 // 指定 @username の公開ポストを X API 経由で取得し、エンゲージメント最大のものを
 // 既存の repurpose エンジンに投げて「型と感情」を抽出 → 自社テーマに置き換えた
@@ -39,24 +40,17 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "ユーザー名の形式が正しくありません（英数字と_のみ、最大15文字）" }, { status: 400 });
         }
 
-        const settings = await prisma.settings.findUnique({
-            where: { userId: user.id }
-        });
-
-        if (!settings) {
-            return NextResponse.json({ error: "設定情報が見つかりません。設定画面からターゲットやコンセプトを登録してください。" }, { status: 400 });
+        const xAccount = await getActiveXAccount(user.id);
+        if (!xAccount) {
+            return NextResponse.json({ error: "サブアカウントが未設定です。設定画面でアカウントを追加してください。" }, { status: 400 });
         }
 
-        if (!settings.xApiKey || !settings.xApiSecret || !settings.xAccessToken || !settings.xAccessSecret) {
-            return NextResponse.json({ error: "X API キーが未登録です。設定画面で BYOK キーを保存してください。" }, { status: 400 });
+        let client;
+        try {
+            client = await getTwitterClient(user.id, xAccount.id);
+        } catch (err: any) {
+            return NextResponse.json({ error: err?.message || "X API クライアント初期化に失敗しました" }, { status: 400 });
         }
-
-        const client = new TwitterApi({
-            appKey: settings.xApiKey,
-            appSecret: settings.xApiSecret,
-            accessToken: settings.xAccessToken,
-            accessSecret: settings.xAccessSecret,
-        });
 
         // username → userId の解決
         let targetUserId: string;
@@ -115,10 +109,10 @@ export async function POST(req: Request) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     source_post_text: best.text,
-                    target_audience: settings.targetAudience || "",
-                    target_pain: settings.targetPain || "",
-                    account_concept: settings.accountConcept || "",
-                    profile: settings.profile || ""
+                    target_audience: xAccount.targetAudience || "",
+                    target_pain: xAccount.targetPain || "",
+                    account_concept: xAccount.accountConcept || "",
+                    profile: xAccount.profile || ""
                 }),
                 signal: AbortSignal.timeout(30000),
             });
@@ -141,9 +135,9 @@ export async function POST(req: Request) {
                 extracted_format: "【オフライン分析】冒頭フック → 理由の展開 → 行動を促すCTA の三段構成",
                 extracted_emotion: "知的好奇心 × 危機感",
                 generated_posts: [
-                    `${settings.targetPain || "集客"}に悩む${settings.targetAudience || "あなた"}へ。\n実はこの構造を真似するだけでインプレッションは3倍になります。\n\n具体的には...\n1. 冒頭で常識を否定する\n2. データで裏付ける\n3. 明確なアクションを示す\n\n保存して今日から実践してください。`,
-                    `「まだその方法で消耗してるの？」\n\n${settings.targetAudience || "多くの人"}が見落としている事実があります。\n${settings.accountConcept || "ビジネス"}の掛け合わせで成果が出る人と出ない人の差はたった1つ。\n\nそれは...（続きはプロフへ）`,
-                    `【警告】${settings.targetPain || "SNS集客"}で最もやってはいけないこと\n\nそれは「毎日投稿すること」です。\n\nえ？と思った方、正解です。\n大事なのは頻度ではなく"構造"。\n\n${settings.profile || "プロ"}が使う具体的な構造を公開します👇`,
+                    `${xAccount.targetPain || "集客"}に悩む${xAccount.targetAudience || "あなた"}へ。\n実はこの構造を真似するだけでインプレッションは3倍になります。\n\n具体的には...\n1. 冒頭で常識を否定する\n2. データで裏付ける\n3. 明確なアクションを示す\n\n保存して今日から実践してください。`,
+                    `「まだその方法で消耗してるの？」\n\n${xAccount.targetAudience || "多くの人"}が見落としている事実があります。\n${xAccount.accountConcept || "ビジネス"}の掛け合わせで成果が出る人と出ない人の差はたった1つ。\n\nそれは...（続きはプロフへ）`,
+                    `【警告】${xAccount.targetPain || "SNS集客"}で最もやってはいけないこと\n\nそれは「毎日投稿すること」です。\n\nえ？と思った方、正解です。\n大事なのは頻度ではなく"構造"。\n\n${xAccount.profile || "プロ"}が使う具体的な構造を公開します👇`,
                 ],
                 _fallback: true,
                 _source_username: `@${normalized}`,

@@ -15,6 +15,8 @@ export async function GET(req: Request) {
         const now = new Date();
 
         // SCHEDULEDステータスで、scheduledAtが現在時刻以前の投稿を取得
+        // TODO: cron — 後日 multi-account 対応。各 Post には既に xAccountId が紐付くため
+        //   今は userId 単位で動かす（投稿ごとの xAccount に応じた OAuth クライアント切替は将来改善）。
         const postsToPublish = await prisma.post.findMany({
             where: {
                 status: "SCHEDULED",

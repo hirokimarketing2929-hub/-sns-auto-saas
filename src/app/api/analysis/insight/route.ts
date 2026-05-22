@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { suggestionHash } from "@/lib/analysis-hash";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // Claude / OpenAI を使って「直近 N 日のパフォーマンス」を自然言語で要約・助言する。
 // 出力は JSON: { headline, what_worked, what_didnt, next_moves: string[], tldr }
@@ -91,6 +92,8 @@ export async function POST(req: Request) {
         const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const { days = 7 } = (await req.json().catch(() => ({}))) as { days?: number };
         const rangeDays = Math.max(1, Math.min(90, Number(days)));
 
@@ -121,16 +124,16 @@ export async function POST(req: Request) {
 
         const [pastPosts, funnelEvents, knowledges] = await Promise.all([
             prisma.pastPost.findMany({
-                where: { userId: user.id, postedAt: { gte: since } },
+                where: { userId: user.id, xAccountId, postedAt: { gte: since } },
                 orderBy: { impressions: "desc" },
                 take: 20,
             }),
             prisma.funnelEvent.findMany({
-                where: { userId: user.id, occurredAt: { gte: since } },
+                where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
                 select: { occurredAt: true, formName: true, utmCampaign: true, utmContent: true },
             }),
             prisma.knowledge.findMany({
-                where: { userId: user.id, OR: [{ type: "WINNING" }, { type: "LOSING" }] },
+                where: { userId: user.id, xAccountId, OR: [{ type: "WINNING" }, { type: "LOSING" }] },
                 take: 15,
             }),
         ]);
@@ -245,7 +248,7 @@ export async function POST(req: Request) {
             };
             try {
                 const rejectedRows = await db.rejectedSuggestion.findMany({
-                    where: { userId: user.id, contentHash: { in: candidateHashes } },
+                    where: { userId: user.id, xAccountId, contentHash: { in: candidateHashes } },
                     select: { contentHash: true },
                 });
                 if (rejectedRows.length > 0) {

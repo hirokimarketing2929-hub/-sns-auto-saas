@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     try {
@@ -18,12 +19,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const settings = await prisma.settings.findUnique({
-            where: { userId: user.id }
-        });
-
-        if (!settings) {
-            return NextResponse.json({ error: "設定情報が見つかりません。設定画面からターゲットやコンセプトを登録してください。" }, { status: 400 });
+        const xAccount = await getActiveXAccount(user.id);
+        if (!xAccount) {
+            return NextResponse.json({ error: "サブアカウントが未設定です。設定画面でアカウントを追加してください。" }, { status: 400 });
         }
 
         // FastAPIへリクエスト
@@ -34,10 +32,10 @@ export async function POST(req: Request) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    target_audience: settings.targetAudience || "",
-                    target_pain: settings.targetPain || "",
-                    account_concept: settings.accountConcept || "",
-                    profile: settings.profile || ""
+                    target_audience: xAccount.targetAudience || "",
+                    target_pain: xAccount.targetPain || "",
+                    account_concept: xAccount.accountConcept || "",
+                    profile: xAccount.profile || ""
                 }),
                 signal: AbortSignal.timeout(30000),
             });
@@ -54,9 +52,9 @@ export async function POST(req: Request) {
             // FastAPI接続失敗時のフォールバック
             console.warn("FastAPI unreachable, returning fallback response:", fetchError);
 
-            const audience = settings.targetAudience || "個人事業主";
-            const pain = settings.targetPain || "集客が伸びない";
-            const concept = settings.accountConcept || "AI×ビジネス";
+            const audience = xAccount.targetAudience || "個人事業主";
+            const pain = xAccount.targetPain || "集客が伸びない";
+            const concept = xAccount.accountConcept || "AI×ビジネス";
 
             return NextResponse.json({
                 extracted_format: "【AI提案】逆張りフック → 実体験ベースの証拠 → 行動喚起 の三段構成",

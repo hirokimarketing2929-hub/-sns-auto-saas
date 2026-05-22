@@ -1,71 +1,70 @@
 import { TwitterApi } from "twitter-api-v2";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 /**
- * ユーザーIDに紐づくTwitterApiクライアントを取得する
- * 1. Settingsに手動入力(BYOK)のAPIキーがあればそれを優先して返す（テスト用）
- * 2. なければAccountテーブルのOAuth 2.0トークンを取得
- * 3. トークンが期限切れ（または近い）場合はリフレッシュしてDBを更新する
+ * 指定ユーザーの「アクティブな」サブアカウントに紐づく TwitterApi クライアントを返す。
+ * 第 2 引数 xAccountId を渡すとそのアカウント固定で取得（cron / バッチ用）。
+ *
+ * 1. XAccount に手動 BYOK キーが揃っていればそれを優先（テスト用）
+ * 2. なければ XAccount.oauthAccount（NextAuth Account の twitter）の access_token を使用
+ * 3. 期限切れ間近なら refresh して NextAuth Account を更新
  */
-export async function getTwitterClient(userId: string): Promise<TwitterApi> {
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
-        include: { settings: true, accounts: true }
-    });
+export async function getTwitterClient(userId: string, xAccountId?: string): Promise<TwitterApi> {
+    const xAccount = xAccountId
+        ? await prisma.xAccount.findFirst({
+            where: { id: xAccountId, userId },
+            include: { oauthAccount: true },
+        })
+        : await getActiveXAccount(userId);
 
-    if (!user) {
-        throw new Error("ユーザー情報の取得に失敗しました");
+    if (!xAccount) {
+        throw new Error("X(Twitter)アカウントが連携されていません。設定画面からアカウントを追加してください。");
     }
 
-    const settings = user.settings;
-    
-    // 1. 手動のAPIキー設定があるかチェック (BYOK優先)
-    const hasManualKeys = settings && 
-                          settings.xApiKey && 
-                          settings.xApiSecret && 
-                          settings.xAccessToken && 
-                          settings.xAccessSecret;
-
-    if (hasManualKeys) {
+    // 1. 手動BYOKキー優先
+    if (
+        xAccount.xApiKey &&
+        xAccount.xApiSecret &&
+        xAccount.xAccessToken &&
+        xAccount.xAccessSecret
+    ) {
         return new TwitterApi({
-            appKey: settings.xApiKey as string,
-            appSecret: settings.xApiSecret as string,
-            accessToken: settings.xAccessToken as string,
-            accessSecret: settings.xAccessSecret as string,
+            appKey: xAccount.xApiKey,
+            appSecret: xAccount.xApiSecret,
+            accessToken: xAccount.xAccessToken,
+            accessSecret: xAccount.xAccessSecret,
         });
     }
 
-    // 2. OAuthコンシューマートークンがあるかチェック
-    const twitterAccount = user.accounts.find((acc: { provider: string; access_token: string | null; refresh_token: string | null; expires_at: number | null; id: string }) => acc.provider === "twitter");
-    if (!twitterAccount || !twitterAccount.access_token) {
-        throw new Error("X(Twitter)アカウントが連携されていません。設定画面から連携してください。");
+    // 2. OAuth トークン
+    const oauth = (xAccount as any).oauthAccount;
+    if (!oauth || !oauth.access_token) {
+        throw new Error(`「${xAccount.displayName}」に X 連携が設定されていません。設定画面で OAuth 連携または手動 API キーを登録してください。`);
     }
 
-    // 3. トークンの有効期限チェックとリフレッシュ処理
+    // 3. リフレッシュ判定（期限の 5 分前）
     const now = Math.floor(Date.now() / 1000);
-    // 期限まで5分(300秒)を切っていたらリフレッシュする
-    const isExpired = !twitterAccount.expires_at || twitterAccount.expires_at < (now + 300);
+    const isExpired = !oauth.expires_at || oauth.expires_at < (now + 300);
 
-    if (isExpired && twitterAccount.refresh_token) {
+    if (isExpired && oauth.refresh_token) {
         try {
-            console.log(`[Twitter OAuth] Refreshing token for user ${userId}...`);
+            console.log(`[Twitter OAuth] Refreshing token for user ${userId} / xAccount ${xAccount.id}...`);
             const clientForRefresh = new TwitterApi({
                 clientId: process.env.TWITTER_CLIENT_ID as string,
                 clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
             });
 
-            // refreshOAuth2Token(refreshToken) は新しい accessToken 等を返す
-            const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } = 
-                await clientForRefresh.refreshOAuth2Token(twitterAccount.refresh_token);
+            const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } =
+                await clientForRefresh.refreshOAuth2Token(oauth.refresh_token);
 
-            // DBを新しいトークンで更新
             await prisma.account.update({
-                where: { id: twitterAccount.id },
+                where: { id: oauth.id },
                 data: {
                     access_token: accessToken,
                     refresh_token: newRefreshToken,
                     expires_at: Math.floor(Date.now() / 1000) + expiresIn,
-                }
+                },
             });
 
             console.log(`[Twitter OAuth] Token refreshed successfully.`);
@@ -76,6 +75,5 @@ export async function getTwitterClient(userId: string): Promise<TwitterApi> {
         }
     }
 
-    // 有効期限内なら既存のアクセストークンでクライアント作成
-    return new TwitterApi(twitterAccount.access_token);
+    return new TwitterApi(oauth.access_token);
 }

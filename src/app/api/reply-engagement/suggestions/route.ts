@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
@@ -11,12 +12,14 @@ export async function GET(req: Request) {
     const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+    const xAccountId = await getActiveXAccountId(user.id);
+
     const url = new URL(req.url);
     const limit = Math.min(Number(url.searchParams.get("limit") || 50), 200);
     const cursor = url.searchParams.get("cursor") || undefined;
 
     const items = await prisma.replyEngagementSuggestion.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, xAccountId },
         orderBy: { createdAt: "desc" },
         take: limit + 1,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

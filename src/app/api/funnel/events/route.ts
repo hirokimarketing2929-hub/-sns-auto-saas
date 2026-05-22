@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // ファンネルイベント（プロライン登録等）の一覧 + 集計
 // Query:
@@ -15,6 +16,8 @@ export async function GET(req: Request) {
     const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+    const xAccountId = await getActiveXAccountId(user.id);
+
     const url = new URL(req.url);
     const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days") || 30)));
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 50)));
@@ -24,7 +27,7 @@ export async function GET(req: Request) {
 
     const [recent, totalCount, byForm, byScenario, byUtmCampaign] = await Promise.all([
         prisma.funnelEvent.findMany({
-            where: { userId: user.id, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
             orderBy: { occurredAt: "desc" },
             take: limit,
             select: {
@@ -41,13 +44,14 @@ export async function GET(req: Request) {
             },
         }),
         prisma.funnelEvent.count({
-            where: { userId: user.id, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
         }),
         // フォーム送信のフォーム名別（source が proline_form もしくは従来の proline）
         prisma.funnelEvent.groupBy({
             by: ["formName"],
             where: {
                 userId: user.id,
+                xAccountId,
                 occurredAt: { gte: since },
                 source: { in: ["proline_form", "proline"] },
             },
@@ -58,6 +62,7 @@ export async function GET(req: Request) {
             by: ["formName"],
             where: {
                 userId: user.id,
+                xAccountId,
                 occurredAt: { gte: since },
                 source: "proline_scenario",
             },
@@ -65,7 +70,7 @@ export async function GET(req: Request) {
         }),
         prisma.funnelEvent.groupBy({
             by: ["utmCampaign"],
-            where: { userId: user.id, occurredAt: { gte: since }, utmCampaign: { not: null } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since }, utmCampaign: { not: null } },
             _count: { _all: true },
         }),
     ]);
@@ -73,7 +78,7 @@ export async function GET(req: Request) {
     // 日別集計（タイムゾーンは JST 相当で日付境界を処理 — クライアント側でも微調整）
     const daily: Record<string, number> = {};
     const allInRange = await prisma.funnelEvent.findMany({
-        where: { userId: user.id, occurredAt: { gte: since } },
+        where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
         select: { occurredAt: true },
     });
     for (const ev of allInRange) {

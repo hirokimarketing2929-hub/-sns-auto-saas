@@ -3,10 +3,10 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import LogoutButton from "./LogoutButton";
+import AccountSwitcher from "@/components/AccountSwitcher";
 import Link from "next/link";
 import {
     LayoutDashboard,
-    Settings,
     Brain,
     Search,
     Sparkles,
@@ -17,7 +17,6 @@ import {
     ImageIcon,
     Zap,
     ExternalLink,
-    ChevronRight,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -40,8 +39,14 @@ export default async function DashboardLayout({
     }
 
     const linkedAccounts = user.accounts || [];
-    const settings = user.settings as any;
-    const hasManualX = !!(settings?.xApiKey && settings?.xAccessToken);
+
+    // サブアカウント (XAccount) 一覧と active を取得
+    const xAccounts = await (prisma as any).xAccount.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "asc" },
+    });
+    const activeXAccountId: string | null = (user as any).activeXAccountId ?? null;
+    const activeXAccount = xAccounts.find((x: any) => x.id === activeXAccountId) || xAccounts[0] || null;
 
     const twitterAccount = linkedAccounts.find((acc: any) => acc.provider === "twitter");
     if (twitterAccount && twitterAccount.scope) {
@@ -85,43 +90,17 @@ export default async function DashboardLayout({
                             STEP 1: 連携 & ナレッジ
                         </p>
                         <div className="space-y-0.5">
-                            <div className="relative group">
-                                <div className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all cursor-default">
-                                    <Settings className="size-4" />
-                                    <span>アカウント管理</span>
-                                    <ChevronRight className="size-3 ml-auto opacity-50 group-hover:rotate-90 transition-transform" />
-                                </div>
-                                <div className="hidden group-hover:block mt-1 ml-3 transition-all">
-                                    <div className="glass rounded-xl py-2 w-full shadow-xl overflow-hidden">
-                                        <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider border-b border-white/5 pb-2 mb-1">
-                                            連携済みアカウント
-                                        </div>
-                                        {linkedAccounts.length === 0 && !hasManualX && (
-                                            <div className="px-4 py-2 text-sm text-muted-foreground">連携アカウントなし</div>
-                                        )}
-                                        {hasManualX && (
-                                            <Link href="/dashboard/settings" className="flex items-center gap-2 px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
-                                                {settings?.xProfileImageUrl ? (
-                                                    <img src={settings.xProfileImageUrl} alt="icon" className="w-5 h-5 rounded-full ring-1 ring-white/10" />
-                                                ) : (
-                                                    <span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold">𝕏</span>
-                                                )}
-                                                <span className="truncate">{settings?.xAccountName ? `${settings.xAccountName} (𝕏)` : "𝕏 (設定済み)"}</span>
-                                            </Link>
-                                        )}
-                                        {linkedAccounts.map((acc: any) => (
-                                            <Link key={acc.id} href={`/dashboard/settings?accountId=${acc.id}#x-accounts`} className="block px-4 py-2 text-sm text-foreground/80 hover:bg-white/5 transition-colors">
-                                                {acc.accountName ? `${acc.accountName} (${acc.provider})` : `${acc.provider === "twitter" ? "𝕏" : acc.provider}`}
-                                            </Link>
-                                        ))}
-                                        <div className="px-3 mt-2 border-t border-white/5 pt-2">
-                                            <Link href="/dashboard/settings#x-accounts" className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-purple-300 hover:text-purple-200 glass rounded-lg transition-colors">
-                                                + 新規アカウント追加
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <AccountSwitcher
+                                accounts={xAccounts.map((x: any) => ({
+                                    id: x.id,
+                                    displayName: x.displayName,
+                                    xUsername: x.xUsername,
+                                    xProfileImageUrl: x.xProfileImageUrl,
+                                    hasOAuth: !!x.oauthAccountId,
+                                    hasManualKeys: !!(x.xApiKey && x.xApiSecret && x.xAccessToken && x.xAccessSecret),
+                                }))}
+                                activeId={activeXAccount?.id ?? null}
+                            />
                             <Link href="/dashboard/knowledge" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <Brain className="size-4" />
                                 <span>ナレッジベース</span>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     try {
@@ -19,6 +20,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "User not found." }, { status: 404 });
         }
 
+        // server-to-server: cookie が無いため User.activeXAccountId を使う
+        const xAccountId = await getActiveXAccountId(user.id);
+
         if (type === "PAST_POSTS") {
             // data は過去投稿の配列の想定: { content, impressions, postedAt, etc... }
             const posts = Array.isArray(data) ? data : [data];
@@ -27,13 +31,14 @@ export async function POST(req: Request) {
             for (const post of posts) {
                 // 簡易的に同一テキストがあればスキップするなどの重複チェックを行う
                 const existing = await prisma.pastPost.findFirst({
-                    where: { userId: user.id, content: post.content }
+                    where: { userId: user.id, xAccountId, content: post.content }
                 });
 
                 if (!existing) {
                     await prisma.pastPost.create({
                         data: {
                             userId: user.id,
+                            xAccountId,
                             content: post.content || "",
                             platform: post.platform || "X",
                             postedAt: post.postedAt ? new Date(post.postedAt) : new Date(),
@@ -58,7 +63,7 @@ export async function POST(req: Request) {
 
                 // 既存のKPIシナリオがあれば更新、なければ作成
                 const existingKpi = await prisma.kpiScenario.findFirst({
-                    where: { userId: user.id, name: kpi.name }
+                    where: { userId: user.id, xAccountId, name: kpi.name }
                 });
 
                 if (existingKpi) {
@@ -71,10 +76,11 @@ export async function POST(req: Request) {
                     });
                 } else {
                     // オーダー番号の計算
-                    const count = await prisma.kpiScenario.count({ where: { userId: user.id } });
+                    const count = await prisma.kpiScenario.count({ where: { userId: user.id, xAccountId } });
                     await prisma.kpiScenario.create({
                         data: {
                             userId: user.id,
+                            xAccountId,
                             name: kpi.name,
                             order: count + 1,
                             targetValue: Number(kpi.targetValue) || 0,

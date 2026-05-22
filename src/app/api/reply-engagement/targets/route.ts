@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 const MAX_TARGETS = 10;
 
@@ -18,8 +19,10 @@ export async function GET() {
         const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
         if (!user) return errJson("User not found", 404);
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const targets = await prisma.replyEngagementTarget.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, xAccountId },
             orderBy: { createdAt: "asc" },
         });
         return NextResponse.json({ targets, max: MAX_TARGETS });
@@ -39,6 +42,8 @@ export async function POST(req: Request) {
         const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
         if (!user) return errJson("User not found", 404);
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         let body: { action?: string; payload?: Record<string, unknown> };
         try {
             body = await req.json();
@@ -48,7 +53,7 @@ export async function POST(req: Request) {
         const { action, payload } = body || {};
 
         if (action === "create") {
-            const count = await prisma.replyEngagementTarget.count({ where: { userId: user.id } });
+            const count = await prisma.replyEngagementTarget.count({ where: { userId: user.id, xAccountId } });
             if (count >= MAX_TARGETS) {
                 return errJson(`ターゲットは最大 ${MAX_TARGETS} 件までです`, 400);
             }
@@ -73,6 +78,7 @@ export async function POST(req: Request) {
                 const created = await prisma.replyEngagementTarget.create({
                     data: {
                         userId: user.id,
+                        xAccountId,
                         username: raw,
                         displayName: (payload?.displayName as string) || null,
                         isActive: true,

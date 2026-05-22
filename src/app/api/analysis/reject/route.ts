@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { suggestionHash } from "@/lib/analysis-hash";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // analysis画面で「却下」されたAI提案を永続化する。
 // 同じ contentHash が再度送られても upsert で 1 行に保つ（複数回押しても DB は冪等）。
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
             select: { id: true },
         });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+        const xAccountId = await getActiveXAccountId(user.id);
 
         const body = await req.json().catch(() => ({})) as {
             content?: unknown;
@@ -50,6 +53,7 @@ export async function POST(req: Request) {
             update: { rejectedAt: new Date() },
             create: {
                 userId: user.id,
+                xAccountId,
                 contentHash,
                 contentSnippet,
                 type,

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { sendChatworkMessage } from "@/lib/chatwork";
 import { logXApiUsage, logLlmUsage } from "@/lib/api-usage";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 // リプ回り半自動化：
 //   1. アクティブなターゲットアカウントの最新ポストを X API で取得
@@ -156,6 +157,9 @@ async function resolveProvider(userId: string): Promise<Provider | null> {
 }
 
 // 1ユーザー分の実行
+// TODO: cron — 後日 multi-account 対応。cron 経由で呼ばれるとき cookie が無いため、
+//   getActiveXAccountId は User.activeXAccountId を見る。複数 XAccount があるユーザーは
+//   将来的にループに切り替える必要あり。
 async function processUser(userId: string): Promise<{ suggested: number; notified: number; errors: string[] }> {
     const errors: string[] = [];
     let suggested = 0;
@@ -166,10 +170,17 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
         errors.push("ChatWork 未設定（API token または Room ID）");
         return { suggested, notified, errors };
     }
-    const minImp = settings.replyEngagementMinImp ?? 500;
+
+    const xAccount = await getActiveXAccount(userId);
+    if (!xAccount) {
+        errors.push("サブアカウントが未設定です");
+        return { suggested, notified, errors };
+    }
+    const xAccountId = xAccount.id;
+    const minImp = xAccount.replyEngagementMinImp ?? 500;
 
     const targets = await prisma.replyEngagementTarget.findMany({
-        where: { userId, isActive: true },
+        where: { userId, xAccountId, isActive: true },
         orderBy: { createdAt: "asc" },
         take: 10,
     });
@@ -196,7 +207,7 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
 
     // ナレッジ（WINNING）
     const winning = await prisma.knowledge.findMany({
-        where: { userId, type: "WINNING" },
+        where: { userId, xAccountId, type: "WINNING" },
         take: 10,
     });
 
@@ -235,7 +246,7 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
             // 既に提案済みのポストを除外
             const existingIds = new Set(
                 (await prisma.replyEngagementSuggestion.findMany({
-                    where: { userId, tweetId: { in: candidates.map(c => c.id) } },
+                    where: { userId, xAccountId, tweetId: { in: candidates.map(c => c.id) } },
                     select: { tweetId: true },
                 })).map(r => r.tweetId)
             );
@@ -250,9 +261,9 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
                 tweetText: target1.text,
                 targetUsername: target.username,
                 selfPersona: {
-                    targetAudience: settings?.targetAudience || "",
-                    accountConcept: settings?.accountConcept || "",
-                    profile: settings?.profile || "",
+                    targetAudience: xAccount.targetAudience || "",
+                    accountConcept: xAccount.accountConcept || "",
+                    profile: xAccount.profile || "",
                 },
                 winning: winning.map(w => w.content),
             });
@@ -280,6 +291,7 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
             const created = await prisma.replyEngagementSuggestion.create({
                 data: {
                     userId,
+                    xAccountId,
                     targetUsername: target.username,
                     tweetId: target1.id,
                     tweetUrl,

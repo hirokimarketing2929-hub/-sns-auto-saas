@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { logXApiUsage } from "@/lib/api-usage";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
         if (!user) {
             return NextResponse.json({ message: "User not found" }, { status: 404 });
         }
+
+        const xAccountId = await getActiveXAccountId(user.id);
 
         // Twitter APIクライアントを取得（OAuth連携 or 手動APIキー）
         let client;
@@ -106,6 +109,7 @@ export async function POST(req: Request) {
                 },
                 create: {
                     userId: user.id,
+                    xAccountId,
                     content: tweet.text,
                     platform: "X",
                     postedAt: tweet.created_at ? new Date(tweet.created_at) : new Date(),

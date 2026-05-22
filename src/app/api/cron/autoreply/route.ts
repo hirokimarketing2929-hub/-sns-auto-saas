@@ -28,6 +28,9 @@ export async function GET(req: Request) {
         // (2) 稼働中 + チェック間隔が経過したキャンペーンだけを取得
         //     各キャンペーンの lastCheckedAt + checkIntervalMinutes <= now なら処理対象
         //     （cron 自体は毎分回るが、interval=5 のキャンペーンは 5 分毎にしか処理されない）
+        // TODO: cron — 後日 multi-account 対応。現状は AutoReplyCampaign 自体が xAccountId を持つため、
+        //   全キャンペーンを横断的に取得する形は既に sub-account 互換。各キャンペーンの xAccountId を
+        //   利用したクライアント切替や、xAccount 単位のレート制御は将来の改善タスク。
         const allActive = await db.autoReplyCampaign.findMany({
             where: { isActive: true },
             include: {
@@ -62,9 +65,10 @@ export async function GET(req: Request) {
             const targetPostId = postIdMatch ? postIdMatch[1] : targetUrl;
 
             // ユーザー設定からTwitter APIクライアントを取得 (OAuthリフレッシュ対応)
+            // キャンペーンが属する XAccount のクレデンシャルで送信する
             let twitterClient: TwitterApi | null = null;
             try {
-                twitterClient = await getTwitterClient(campaign.userId);
+                twitterClient = await getTwitterClient(campaign.userId, campaign.xAccountId || undefined);
             } catch (err: any) {
                 console.warn(`Campaign ${campaign.id}: API keys not configured or invalid. Skipping. (${err.message})`);
                 runLogs.push(`Skipped campaign ${campaign.name}: ${err.message}`);

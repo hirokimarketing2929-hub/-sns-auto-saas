@@ -29,10 +29,76 @@ model User {
   replyEngagementSuggestions ReplyEngagementSuggestion[] // 生成されたリプ案の履歴
   rejectedSuggestions        RejectedSuggestion[]        // analysis画面で却下したAI提案（再表示抑制）
 
+  // ▼ サブアカウント機能（X連携・ナレッジ等を完全分離）▼
+  xAccounts        XAccount[] // 連携したXサブアカウント群
+  activeXAccountId String?    // 現在選択中のサブアカウントID（UIで切替）
+
   // サブスクリプション・ストレージ管理
   plan          String   @default("FREE") // FREE, STANDARD, PRO
   maxStorage    Int      @default(524288000) // バイト単位 (デフォルト500MB)
   usedStorage   Int      @default(0) // 現在の使用量（バイト単位）
+}
+
+// ツール内のサブアカウント。1ユーザーが複数の X アカウントを切替えて運用するための単位。
+// ・X API連携キー（OAuth or BYOK）はここに保持し、Settings からは独立する
+// ・運用ルール（ペルソナ・閾値・リプ周り設定など）もアカウント別に保持
+// ・Post/PastPost/Knowledge/KPI/AutoReplyCampaign/ReplyEngagementTarget等の
+//   per-account データは xAccountId で紐づけ、アカウント切替で完全に分離する
+// ・AI API キー（Anthropic/OpenAI）等のユーザー共通設定は引き続き Settings 側で持つ
+model XAccount {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName String   // ユーザー任意の管理名（例: "メイン告知"）
+
+  // OAuth経由の連携時は NextAuth の Account レコードを参照する
+  oauthAccountId String? @unique
+  oauthAccount   Account? @relation(fields: [oauthAccountId], references: [id], onDelete: SetNull)
+
+  // 手動BYOK / 表示メタデータ
+  xApiKey          String?
+  xApiSecret       String?
+  xAccessToken     String?
+  xAccessSecret    String?
+  xUsername        String?  // @username
+  xUserId          String?  // X 内部ユーザーID（取得できれば）
+  xProfileImageUrl String?
+
+  // 運用ルール（Settings から移動 — アカウント別に持つもの）
+  accountConcept       String?  @default("売上目標達成を支援する実践的なノウハウ発信")
+  profile              String?  @default("SNS集客のプロフェッショナル")
+  policy               String?  @default("1日3投稿。図解を活用する。専門用語を避ける。")
+  thresholdImpression  Int?     @default(1000)
+  thresholdConversion  Int?     @default(1)
+  replyEngagementMinImp Int     @default(500)
+
+  // ペルソナ・ターゲティング（Settings から移動）
+  targetAudience       String?  @default("SNS運用代行会社、個人事業主")
+  targetPain           String?  @default("フォロワーが伸びない、集客から販売につながらない")
+  ctaUrl               String?  @default("https://proline.example.com")
+  competitor1          String?
+  competitor2          String?
+
+  // 外部ツール連携（アカウント別 — Settings から移動）
+  spreadsheetUrl       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts                      Post[]
+  pastPosts                  PastPost[]
+  knowledges                 Knowledge[]
+  kpiScenarios               KpiScenario[]
+  autoReplyCampaigns         AutoReplyCampaign[]
+  replyEngagementTargets     ReplyEngagementTarget[]
+  replyEngagementSuggestions ReplyEngagementSuggestion[]
+  funnelEvents               FunnelEvent[]
+  rejectedSuggestions        RejectedSuggestion[]
+  apiUsageLogs               ApiUsageLog[]
+  media                      Media[]
+
+  @@index([userId])
 }
 
 model Account {
@@ -51,6 +117,9 @@ model Account {
   accountName        String?  // 追加：ユーザーが任意に設定できる管理名
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // この OAuth Account を所有する XAccount（サブアカウント）
+  xAccount XAccount?
 
   @@unique([provider, providerAccountId])
 }
@@ -126,6 +195,10 @@ model PastPost {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // サブアカウント（XAccount）への所属。マイグレーション期間中は nullable
+  xAccountId   String?
+  xAccount     XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
+
   content      String   // 実際の投稿テキスト
   platform     String   @default("X")
   postedAt     DateTime // 投稿された日時
@@ -145,6 +218,8 @@ model PastPost {
   analysisStatus String @default("UNANALYZED")
 
   createdAt    DateTime @default(now())
+
+  @@index([xAccountId])
 }
 
 // AIが分析して導き出したナレッジ（成功/失敗の法則）
@@ -152,6 +227,9 @@ model Knowledge {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId   String?
+  xAccount     XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   content      String   // 抽出された法則テキスト
   type         String   // "BASE" or "WINNING" or "LOSING"
@@ -162,12 +240,17 @@ model Knowledge {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([xAccountId])
 }
 
 model Post {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId   String?
+  xAccount     XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   content      String   // 生成された投稿内容
   platform     String   // "X" or "Instagram"
@@ -184,6 +267,8 @@ model Post {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([xAccountId])
 }
 
 // データ分析用KPIトラッキングシナリオ
@@ -191,6 +276,9 @@ model KpiScenario {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId   String?
+  xAccount     XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   name         String   // シナリオ名 (例: LPアクセス数、LINE登録数)
   order        Int      // 任意の並び順
@@ -206,6 +294,8 @@ model KpiScenario {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([xAccountId])
 }
 
 // 自動リプライキャンペーン管理用モデル
@@ -213,6 +303,9 @@ model AutoReplyCampaign {
   id           String   @id @default(cuid())
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId   String?
+  xAccount     XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   name         String   // キャンペーン名
   targetUrl    String   // 対象ポストのURLまたはID
@@ -232,6 +325,8 @@ model AutoReplyCampaign {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([xAccountId])
 }
 
 // 自動リプライの送信履歴（二重送信防止用）
@@ -254,6 +349,10 @@ model Media {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId String?
+  xAccount   XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
+
   filename  String   // オリジナルファイル名
   url       String   // アクセス用URLパス (/uploads/...)
   size      Int      // ファイルサイズ（バイト）
@@ -261,6 +360,7 @@ model Media {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([xAccountId])
 }
 
 // リプ回り半自動化のターゲットアカウント（最大10件/ユーザー）
@@ -268,6 +368,9 @@ model ReplyEngagementTarget {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId  String?
+  xAccount    XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   username    String   // X のユーザー名（@抜き）
   displayName String?  // 表示名（キャッシュ）
@@ -278,6 +381,7 @@ model ReplyEngagementTarget {
 
   @@unique([userId, username])
   @@index([userId, isActive])
+  @@index([xAccountId, isActive])
 }
 
 // AI が生成したリプ案の履歴（重複防止 + 振り返り用）
@@ -285,6 +389,9 @@ model ReplyEngagementSuggestion {
   id             String   @id @default(cuid())
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId     String?
+  xAccount       XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   targetUsername String   // 対象アカウントの username
   tweetId        String   // 対象ポスト ID
@@ -300,6 +407,7 @@ model ReplyEngagementSuggestion {
 
   @@unique([userId, tweetId])
   @@index([userId, createdAt])
+  @@index([xAccountId, createdAt])
 }
 
 // プロラインフリー等の外部フォームから受け取った登録イベント
@@ -309,6 +417,9 @@ model FunnelEvent {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId  String?
+  xAccount    XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
 
   source      String   @default("proline")  // "proline" / "other"
   formName    String?                         // ProLine フォーム名（シート名由来）
@@ -329,6 +440,7 @@ model FunnelEvent {
   @@index([userId, occurredAt])
   @@index([userId, utmCampaign])
   @@index([userId, source, occurredAt])
+  @@index([xAccountId, occurredAt])
 }
 
 // AI (Claude/OpenAI) および X API の使用量ログ
@@ -336,6 +448,9 @@ model ApiUsageLog {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xAccountId String?
+  xAccount   XAccount? @relation(fields: [xAccountId], references: [id], onDelete: SetNull)
 
   provider  String   // "anthropic" | "openai" | "x"
   operation String   // "generate" | "research-structure" | "research-extract" | "x-single-tweet" | "x-user-timeline" | etc.
@@ -358,6 +473,7 @@ model ApiUsageLog {
 
   @@index([userId, createdAt])
   @@index([userId, provider, createdAt])
+  @@index([xAccountId, createdAt])
 }
 
 // analysis画面の AI 提案 (`/api/analysis/insight` の suggestions[]) を「却下」したときに記録するテーブル。
@@ -368,6 +484,9 @@ model RejectedSuggestion {
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  xAccountId     String?
+  xAccount       XAccount? @relation(fields: [xAccountId], references: [id], onDelete: Cascade)
+
   contentHash    String   // sha256(normalize(content) + "\u0000" + type + "\u0000" + level)
   contentSnippet String   // 先頭200字。デバッグ用 / UI で「却下したルール一覧」を将来出すため
   type           String   // "BASE" | "TEMPLATE" | "WINNING" | "LOSING"
@@ -377,4 +496,5 @@ model RejectedSuggestion {
 
   @@unique([userId, contentHash])
   @@index([userId, rejectedAt])
+  @@index([xAccountId, rejectedAt])
 }

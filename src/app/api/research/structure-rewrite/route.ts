@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -472,10 +473,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "テーマを入力してください（必須）。" }, { status: 400 });
         }
 
+        const xAccount = await getActiveXAccount(user.id);
+        if (!xAccount) {
+            return NextResponse.json({ error: "サブアカウントが未設定です。" }, { status: 400 });
+        }
+        const xAccountId = xAccount.id;
+
         const [settings, allKnowledges] = await Promise.all([
             prisma.settings.findUnique({ where: { userId: user.id } }),
             prisma.knowledge.findMany({
-                where: { userId: user.id },
+                where: { userId: user.id, xAccountId },
                 orderBy: [{ order: "asc" }, { createdAt: "desc" }],
             }),
         ]);
@@ -500,11 +507,11 @@ export async function POST(req: Request) {
         console.log(`[structure-rewrite] provider resolved: ${providerSource}, user-anthropic-len: ${settings.anthropicApiKey?.length ?? 0}, user-openai-len: ${settings.openaiApiKey?.length ?? 0}, env-anthropic: ${process.env.ANTHROPIC_API_KEY ? "set" : "unset"}`);
 
         const persona: Persona = {
-            target_audience: settings.targetAudience || "",
-            target_pain: settings.targetPain || "",
-            account_concept: settings.accountConcept || "",
-            profile: settings.profile || "",
-            cta_url: settings.ctaUrl || "",
+            target_audience: xAccount.targetAudience || "",
+            target_pain: xAccount.targetPain || "",
+            account_concept: xAccount.accountConcept || "",
+            profile: xAccount.profile || "",
+            cta_url: xAccount.ctaUrl || "",
         };
 
         if (!provider) {

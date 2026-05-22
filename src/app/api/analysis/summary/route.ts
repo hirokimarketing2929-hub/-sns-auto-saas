@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { logXApiUsage } from "@/lib/api-usage";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // データ分析画面用の統合サマリー。
 //   - X: 自分のプロフィール(follower数等) + 直近投稿のメトリクス
@@ -28,6 +29,8 @@ export async function GET(req: Request) {
         select: { id: true },
     });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const xAccountId = await getActiveXAccountId(user.id);
 
     const now = new Date();
     const since = new Date(now);
@@ -78,7 +81,7 @@ export async function GET(req: Request) {
 
     // --- PastPost から投稿メトリクスを集計 ---
     const pastPosts = await prisma.pastPost.findMany({
-        where: { userId: user.id, postedAt: { gte: since } },
+        where: { userId: user.id, xAccountId, postedAt: { gte: since } },
         orderBy: { postedAt: "desc" },
     });
 
@@ -125,20 +128,20 @@ export async function GET(req: Request) {
 
     // --- Funnel（プロライン） ---
     const [funnelToday, funnelMonth, funnelInRange, funnelByForm, funnelByUtm] = await Promise.all([
-        prisma.funnelEvent.count({ where: { userId: user.id, occurredAt: { gte: startOfToday } } }),
-        prisma.funnelEvent.count({ where: { userId: user.id, occurredAt: { gte: startOfMonth } } }),
+        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfToday } } }),
+        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfMonth } } }),
         prisma.funnelEvent.findMany({
-            where: { userId: user.id, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
             select: { occurredAt: true, utmCampaign: true, utmContent: true, formName: true },
         }),
         prisma.funnelEvent.groupBy({
             by: ["formName"],
-            where: { userId: user.id, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
             _count: { _all: true },
         }),
         prisma.funnelEvent.groupBy({
             by: ["utmCampaign"],
-            where: { userId: user.id, occurredAt: { gte: since }, utmCampaign: { not: null } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since }, utmCampaign: { not: null } },
             _count: { _all: true },
         }),
     ]);

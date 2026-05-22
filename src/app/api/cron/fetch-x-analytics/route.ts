@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { TwitterApi } from "twitter-api-v2";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function GET(req: Request) {
     // 簡易的な認証（実運用では VERCEL_CRON_SECRET などを検証）
@@ -26,6 +27,9 @@ export async function GET(req: Request) {
 
         let updatedCount = 0;
 
+        // TODO: cron — 後日 multi-account 対応。現状は Settings 1件 = 1ユーザーで動かし、
+        //   PastPost には現在アクティブな xAccount を紐付ける（cookie が無いので User.activeXAccountId を採用）。
+        //   将来は user の全 XAccount をループする実装に変えること。
         for (const settings of settingsWithTwitter) {
             try {
                 // Twitter API クライアント初期化 (OAuth 1.0a User Context)
@@ -35,6 +39,8 @@ export async function GET(req: Request) {
                     accessToken: settings.xAccessToken!,
                     accessSecret: settings.xAccessSecret!,
                 });
+
+                const xAccountId = await getActiveXAccountId(settings.userId);
 
                 // Read Only (V2) クライアント
                 const roClient = client.readOnly;
@@ -65,6 +71,7 @@ export async function GET(req: Request) {
                         },
                         create: {
                             userId: settings.userId,
+                            xAccountId,
                             content: tweet.text,
                             platform: "X",
                             postedAt: tweet.created_at ? new Date(tweet.created_at) : new Date(),

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -17,9 +18,11 @@ export async function POST(req: Request) {
 
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         // ユーザーの過去データを全て取得
         const pastPosts = await prisma.pastPost.findMany({
-            where: { userId: user.id }
+            where: { userId: user.id, xAccountId }
         });
 
         const positivePosts = pastPosts.filter((p: { analysisStatus: string }) => p.analysisStatus === "POSITIVE").map((p: { content: string }) => p.content);
@@ -53,6 +56,7 @@ export async function POST(req: Request) {
             await prisma.knowledge.createMany({
                 data: extractedKnowledges.map((k: any) => ({
                     userId: user.id,
+                    xAccountId,
                     content: k.content,
                     type: k.type,
                     source: k.source

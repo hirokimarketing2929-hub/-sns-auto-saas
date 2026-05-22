@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // プロラインフリーからの form_data を受け取る webhook 受信エンドポイント。
 // 想定: ユーザーの GAS が doPost 内で本エンドポイントに JSON を転送してくる。
@@ -83,9 +84,13 @@ export async function POST(
         const utmCampaign = pick("utm_campaign");
         const utmContent = pick("utm_content");
 
+        // webhook は cookie が無いため、User.activeXAccountId（または最古の XAccount）を採用する
+        const xAccountId = await getActiveXAccountId(settings.userId);
+
         await prisma.funnelEvent.create({
             data: {
                 userId: settings.userId,
+                xAccountId,
                 source,
                 formName: label,  // シナリオ名もここに格納（スキーマ互換のため formName を再利用）
                 externalUid,

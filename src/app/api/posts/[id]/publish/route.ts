@@ -37,9 +37,10 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
         }
 
         // 共通Twitterクライアント（OAuthトークンリフレッシュ対応）を取得
+        // 投稿が紐づく XAccount のクレデンシャルで送信する（active と異なる場合に備えて post.xAccountId を優先）
         let client;
         try {
-            client = await getTwitterClient(user.id);
+            client = await getTwitterClient(user.id, post.xAccountId || undefined);
         } catch (error: any) {
             return NextResponse.json({ message: error.message || "X(Twitter)アカウントの連携エラー" }, { status: 400 });
         }

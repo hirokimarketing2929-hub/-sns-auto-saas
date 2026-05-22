@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
+import { getActiveXAccount } from "@/lib/active-x-account";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -156,6 +157,12 @@ export async function POST(req: Request) {
         const user = await prisma.user.findUnique({ where: { email: session.user.email } });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+        const xAccount = await getActiveXAccount(user.id);
+        if (!xAccount) {
+            return NextResponse.json({ error: "サブアカウントが未設定です。" }, { status: 400 });
+        }
+        const xAccountId = xAccount.id;
+
         const body = await req.json();
         const userTheme: string = typeof body?.user_theme === "string" ? body.user_theme : "";
         const enforce140: boolean = body?.enforce_140_limit === true;
@@ -164,16 +171,16 @@ export async function POST(req: Request) {
         const [settings, allKnowledges, pastPosts, kpis] = await Promise.all([
             prisma.settings.findUnique({ where: { userId: user.id } }),
             prisma.knowledge.findMany({
-                where: { userId: user.id },
+                where: { userId: user.id, xAccountId },
                 orderBy: [{ order: "asc" }, { createdAt: "desc" }],
             }),
             prisma.pastPost.findMany({
-                where: { userId: user.id },
+                where: { userId: user.id, xAccountId },
                 orderBy: { postedAt: "desc" },
                 take: 20,
             }),
             prisma.kpiScenario.findMany({
-                where: { userId: user.id },
+                where: { userId: user.id, xAccountId },
                 orderBy: { order: "asc" },
             }),
         ]);
@@ -227,11 +234,11 @@ export async function POST(req: Request) {
             userTheme || "（未指定。ペルソナ・ナレッジに基づく最適な提案をしてください）",
             "",
             "【自社アカウント情報】",
-            `- ターゲット層: ${settings.targetAudience || "（未設定）"}`,
-            `- ターゲットの悩み: ${settings.targetPain || "（未設定）"}`,
-            `- アカウントのコンセプト: ${settings.accountConcept || "（未設定）"}`,
-            `- 発信者のプロフィール: ${settings.profile || "（未設定）"}`,
-            `- 誘導先 URL: ${settings.ctaUrl || "（未設定）"}（※参考情報。投稿本文には URL を載せない）`,
+            `- ターゲット層: ${xAccount.targetAudience || "（未設定）"}`,
+            `- ターゲットの悩み: ${xAccount.targetPain || "（未設定）"}`,
+            `- アカウントのコンセプト: ${xAccount.accountConcept || "（未設定）"}`,
+            `- 発信者のプロフィール: ${xAccount.profile || "（未設定）"}`,
+            `- 誘導先 URL: ${xAccount.ctaUrl || "（未設定）"}（※参考情報。投稿本文には URL を載せない）`,
             "",
             "【自社ナレッジ - ベース（基本方針）】",
             baseRules.length > 0 ? truncateList(baseRules, 10, 300) : "（なし）",

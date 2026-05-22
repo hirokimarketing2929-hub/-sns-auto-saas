@@ -1,0 +1,255 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useRouter } from "next/navigation";
+
+type XAccount = {
+    id: string;
+    displayName: string;
+    xUsername: string | null;
+    xProfileImageUrl: string | null;
+    hasOAuth: boolean;
+    hasManualKeys: boolean;
+    oauthAccountId: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export default function XAccountManager() {
+    const router = useRouter();
+    const [list, setList] = useState<XAccount[]>([]);
+    const [activeId, setActiveId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const [notice, setNotice] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+    // 新規作成フォーム state
+    const [creating, setCreating] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newKeys, setNewKeys] = useState({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
+    const [showKeys, setShowKeys] = useState(false);
+
+    useEffect(() => {
+        load();
+    }, []);
+
+    async function load() {
+        setLoading(true);
+        try {
+            const res = await fetch("/api/x-accounts");
+            if (res.ok) {
+                const data = await res.json();
+                setList(data.xAccounts);
+                setActiveId(data.activeXAccountId);
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function setActive(id: string) {
+        setBusy(true);
+        try {
+            const res = await fetch("/api/x-accounts/active", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ xAccountId: id }),
+            });
+            if (res.ok) {
+                setActiveId(id);
+                setNotice({ type: "success", text: "アクティブアカウントを切替えました" });
+                router.refresh();
+            } else {
+                const d = await res.json().catch(() => ({}));
+                setNotice({ type: "error", text: d?.message || "切替に失敗しました" });
+            }
+        } finally {
+            setBusy(false);
+            setTimeout(() => setNotice(null), 2500);
+        }
+    }
+
+    async function createAccount() {
+        if (!newName.trim()) {
+            setNotice({ type: "error", text: "管理名は必須です" });
+            return;
+        }
+        setBusy(true);
+        try {
+            const body: any = { displayName: newName.trim() };
+            if (showKeys && newKeys.xApiKey) {
+                body.xApiKey = newKeys.xApiKey;
+                body.xApiSecret = newKeys.xApiSecret;
+                body.xAccessToken = newKeys.xAccessToken;
+                body.xAccessSecret = newKeys.xAccessSecret;
+            }
+            const res = await fetch("/api/x-accounts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setNotice({ type: "error", text: d?.message || "作成に失敗しました" });
+                return;
+            }
+            setNewName("");
+            setNewKeys({ xApiKey: "", xApiSecret: "", xAccessToken: "", xAccessSecret: "" });
+            setShowKeys(false);
+            setCreating(false);
+            await load();
+            setNotice({ type: "success", text: "サブアカウントを追加しました" });
+            router.refresh();
+        } finally {
+            setBusy(false);
+            setTimeout(() => setNotice(null), 2500);
+        }
+    }
+
+    async function deleteAccount(id: string, name: string) {
+        if (!confirm(`「${name}」を削除します。\nこのアカウントに紐づく全データ（投稿/ナレッジ/KPI 等）も一緒に削除されます。本当に削除しますか？`)) return;
+        setBusy(true);
+        try {
+            const res = await fetch(`/api/x-accounts/${id}`, { method: "DELETE" });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setNotice({ type: "error", text: d?.message || "削除に失敗しました" });
+                return;
+            }
+            await load();
+            setNotice({ type: "success", text: "削除しました" });
+            router.refresh();
+        } finally {
+            setBusy(false);
+            setTimeout(() => setNotice(null), 2500);
+        }
+    }
+
+    return (
+        <section id="x-accounts" className="space-y-4 scroll-mt-20">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                    <h3 className="text-lg font-semibold">🪪 サブアカウント管理</h3>
+                    <p className="text-xs text-muted-foreground">
+                        X(Twitter) 連携情報・ナレッジ・投稿などはアカウントごとに完全に分離されます。AI APIキーは全アカウントで共通です。
+                    </p>
+                </div>
+                <div className="flex gap-2">
+                    <Button type="button" onClick={() => setCreating(v => !v)} disabled={busy}>
+                        {creating ? "キャンセル" : "+ アカウント追加"}
+                    </Button>
+                </div>
+            </div>
+
+            {notice && (
+                <div className={`text-sm rounded p-2 border ${notice.type === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                    {notice.type === "success" ? "✅" : "⚠️"} {notice.text}
+                </div>
+            )}
+
+            {creating && (
+                <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+                    <div>
+                        <Label htmlFor="newName">管理名 <span className="text-red-500">*</span></Label>
+                        <Input
+                            id="newName"
+                            value={newName}
+                            onChange={e => setNewName(e.target.value)}
+                            placeholder="例: 副業告知用"
+                            className="bg-white"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm">
+                        <input
+                            id="showKeys"
+                            type="checkbox"
+                            checked={showKeys}
+                            onChange={e => setShowKeys(e.target.checked)}
+                        />
+                        <label htmlFor="showKeys" className="cursor-pointer">手動 API キーで紐付け（BYOK）</label>
+                    </div>
+
+                    {showKeys && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-white p-3 rounded border">
+                            {(["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const).map(k => (
+                                <div key={k} className="space-y-1">
+                                    <Label htmlFor={`new_${k}`} className="text-xs">{k}</Label>
+                                    <Input
+                                        id={`new_${k}`}
+                                        type="password"
+                                        value={newKeys[k]}
+                                        onChange={e => setNewKeys(p => ({ ...p, [k]: e.target.value }))}
+                                    />
+                                </div>
+                            ))}
+                            <p className="md:col-span-2 text-[11px] text-muted-foreground">
+                                ※ チェックOFF で作成すると枠だけ作られます。後から API キーを編集して紐付けてください。
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2">
+                        <Button type="button" onClick={createAccount} disabled={busy || !newName.trim()}>
+                            作成
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => setCreating(false)}>
+                            キャンセル
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            <div className="space-y-2">
+                {loading ? (
+                    <div className="py-6 text-center text-sm text-gray-500">読み込み中…</div>
+                ) : list.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-gray-500 border rounded-lg bg-slate-50">
+                        サブアカウントがありません。上のボタンから追加してください。
+                    </div>
+                ) : (
+                    list.map(a => {
+                        const isActive = a.id === activeId;
+                        return (
+                            <div
+                                key={a.id}
+                                className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${isActive ? "border-indigo-400 bg-indigo-50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                            >
+                                {a.xProfileImageUrl ? (
+                                    <img src={a.xProfileImageUrl} alt="icon" className="w-10 h-10 rounded-full ring-1 ring-gray-200" />
+                                ) : (
+                                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">𝕏</div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-semibold truncate">{a.displayName}</span>
+                                        {isActive && <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full">ACTIVE</span>}
+                                        {a.hasOAuth && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">OAuth</span>}
+                                        {a.hasManualKeys && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">BYOK</span>}
+                                        {!a.hasOAuth && !a.hasManualKeys && <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">未連携</span>}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                        {a.xUsername || "—"}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {!isActive && (
+                                        <Button type="button" size="sm" variant="outline" onClick={() => setActive(a.id)} disabled={busy}>
+                                            切替
+                                        </Button>
+                                    )}
+                                    <Button type="button" size="sm" variant="ghost" className="text-red-600" onClick={() => deleteAccount(a.id, a.displayName)} disabled={busy || list.length <= 1}>
+                                        削除
+                                    </Button>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </section>
+    );
+}

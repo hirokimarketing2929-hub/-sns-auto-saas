@@ -41,27 +41,26 @@ export async function GET(req: Request) {
 
         const runLogs: string[] = [];
 
-        // ユーザー毎にAPIリクエストをまとめるためのグループ化
-        const postsByUser: Record<string, any[]> = {};
+        // (userId, xAccountId) の組合せ単位で API クライアントを切り替えてグループ化
+        const postsByGroup: Record<string, any[]> = {};
         for (const post of trackingPosts) {
-            const userId = post.userId;
-            if (!postsByUser[userId]) {
-                postsByUser[userId] = [];
-            }
-            postsByUser[userId].push(post);
+            const key = `${post.userId}:${post.xAccountId ?? ""}`;
+            if (!postsByGroup[key]) postsByGroup[key] = [];
+            postsByGroup[key].push(post);
         }
 
-        // ユーザーごとに処理（APIクライアントの初期化をユーザー単位で行うため）
-        for (const userId in postsByUser) {
-            const userPosts = postsByUser[userId];
+        for (const groupKey in postsByGroup) {
+            const userPosts = postsByGroup[groupKey];
+            const userId = userPosts[0].userId as string;
+            const xAccountId = (userPosts[0].xAccountId as string | null) || undefined;
             const firstPostUser = userPosts[0].user;
 
-            // X API のクライアントを初期化（BYOK または OAuthリフレッシュ対応）
+            // X API のクライアントを初期化（投稿が属する XAccount のクレデンシャル使用）
             let client: TwitterApi | null = null;
             try {
-                client = await getTwitterClient(userId);
+                client = await getTwitterClient(userId, xAccountId);
             } catch (err: any) {
-                runLogs.push(`User ${userId}: Missing or Invalid X API credentials. Skipping. (${err.message})`);
+                runLogs.push(`User ${userId} / xAccount ${xAccountId ?? "none"}: Missing or Invalid X API credentials. Skipping. (${err.message})`);
                 continue;
             }
 
@@ -151,7 +150,7 @@ export async function GET(req: Request) {
 
         return NextResponse.json({
             message: "Impression check cron job executed successfully.",
-            trackedUsers: Object.keys(postsByUser).length,
+            trackedGroups: Object.keys(postsByGroup).length,
             details: runLogs
         });
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 /**
  * POST: 閾値に基づいてPastPostのanalysisStatusを自動分類する。
@@ -39,9 +40,11 @@ export async function POST(req: Request) {
             });
         }
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         // 全投稿を取得して分類
         const allPosts = await prisma.pastPost.findMany({
-            where: { userId: user.id }
+            where: { userId: user.id, xAccountId }
         });
 
         let positiveCount = 0;

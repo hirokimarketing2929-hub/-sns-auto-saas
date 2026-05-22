@@ -4,12 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { logXApiUsage } from "@/lib/api-usage";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // 自動メトリクスを計算して返す
 async function computeMetricValue(
     userId: string,
     source: string,
-    periodDays: number | null
+    periodDays: number | null,
+    xAccountId: string | null
 ): Promise<{ value: number; note?: string } | null> {
     if (!source || source === "manual") return null;
 
@@ -35,13 +37,13 @@ async function computeMetricValue(
     }
     if (source === "x_posts_count") {
         const count = await prisma.pastPost.count({
-            where: { userId, postedAt: { gte: since } },
+            where: { userId, xAccountId, postedAt: { gte: since } },
         });
         return { value: count, note: `直近 ${days} 日の投稿数（同期済み）` };
     }
     if (source === "x_impressions_total") {
         const rows = await prisma.pastPost.findMany({
-            where: { userId, postedAt: { gte: since } },
+            where: { userId, xAccountId, postedAt: { gte: since } },
             select: { impressions: true },
         });
         const total = rows.reduce((s, r) => s + (r.impressions || 0), 0);
@@ -49,7 +51,7 @@ async function computeMetricValue(
     }
     if (source === "x_impressions_avg") {
         const rows = await prisma.pastPost.findMany({
-            where: { userId, postedAt: { gte: since } },
+            where: { userId, xAccountId, postedAt: { gte: since } },
             select: { impressions: true },
         });
         if (rows.length === 0) return { value: 0, note: "データなし" };
@@ -114,7 +116,7 @@ async function computeMetricValue(
     // --- プロライン系 ---
     if (source === "proline_registrations_total") {
         const count = await prisma.funnelEvent.count({
-            where: { userId, occurredAt: { gte: since } },
+            where: { userId, xAccountId, occurredAt: { gte: since } },
         });
         return { value: count, note: `直近 ${days} 日のプロライン登録総数` };
     }
@@ -122,7 +124,7 @@ async function computeMetricValue(
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const count = await prisma.funnelEvent.count({
-            where: { userId, occurredAt: { gte: startOfToday } },
+            where: { userId, xAccountId, occurredAt: { gte: startOfToday } },
         });
         return { value: count, note: "今日のプロライン登録" };
     }
@@ -130,7 +132,7 @@ async function computeMetricValue(
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const count = await prisma.funnelEvent.count({
-            where: { userId, occurredAt: { gte: startOfMonth } },
+            where: { userId, xAccountId, occurredAt: { gte: startOfMonth } },
         });
         return { value: count, note: "今月のプロライン登録" };
     }
@@ -139,6 +141,7 @@ async function computeMetricValue(
         const count = await prisma.funnelEvent.count({
             where: {
                 userId,
+                xAccountId,
                 formName,
                 source: { in: ["proline", "proline_form"] },
                 occurredAt: { gte: since },
@@ -148,7 +151,7 @@ async function computeMetricValue(
     }
     if (source === "proline_scenario_total") {
         const count = await prisma.funnelEvent.count({
-            where: { userId, source: "proline_scenario", occurredAt: { gte: since } },
+            where: { userId, xAccountId, source: "proline_scenario", occurredAt: { gte: since } },
         });
         return { value: count, note: `シナリオ登録 直近 ${days} 日の合計` };
     }
@@ -157,6 +160,7 @@ async function computeMetricValue(
         const count = await prisma.funnelEvent.count({
             where: {
                 userId,
+                xAccountId,
                 source: "proline_scenario",
                 formName: scenarioName,  // スキーマ互換のため formName にシナリオ名も格納
                 occurredAt: { gte: since },
@@ -178,14 +182,20 @@ export async function GET(req: Request) {
     try {
         const user = await prisma.user.findUnique({
             where: { email: session.user.email },
-            include: { kpiScenarios: { orderBy: { order: "asc" } } }
         });
 
         if (!user) {
             return NextResponse.json({ message: "User not found" }, { status: 404 });
         }
 
-        return NextResponse.json({ scenarios: user.kpiScenarios });
+        const xAccountId = await getActiveXAccountId(user.id);
+
+        const scenarios = await prisma.kpiScenario.findMany({
+            where: { userId: user.id, xAccountId },
+            orderBy: { order: "asc" },
+        });
+
+        return NextResponse.json({ scenarios });
     } catch (error) {
         console.error("GET KPI scenarios error:", error);
         return NextResponse.json({ message: "Server error" }, { status: 500 });
@@ -203,6 +213,8 @@ export async function POST(req: Request) {
         const user = await prisma.user.findUnique({ where: { email: session.user.email } });
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const { action, payload } = await req.json();
 
         if (action === "create") {
@@ -211,7 +223,7 @@ export async function POST(req: Request) {
 
             // 現在の最大のorderを取得
             const maxOrderScenario = await prisma.kpiScenario.findFirst({
-                where: { userId: user.id },
+                where: { userId: user.id, xAccountId },
                 orderBy: { order: "desc" }
             });
             const nextOrder = maxOrderScenario ? maxOrderScenario.order + 1 : 0;
@@ -219,12 +231,13 @@ export async function POST(req: Request) {
 
             // 自動ソース指定時は初期値を自動取得する
             let initialValue = Number(currentValue) || 0;
-            const metric = await computeMetricValue(user.id, source, Number(metricPeriodDays) || null);
+            const metric = await computeMetricValue(user.id, source, Number(metricPeriodDays) || null, xAccountId);
             if (metric) initialValue = metric.value;
 
             const newScenario = await prisma.kpiScenario.create({
                 data: {
                     userId: user.id,
+                    xAccountId,
                     name,
                     order: nextOrder,
                     targetValue: Number(targetValue) || 0,
@@ -243,7 +256,7 @@ export async function POST(req: Request) {
             const existing = await prisma.kpiScenario.findUnique({ where: { id, userId: user.id } });
             if (!existing) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
-            const metric = await computeMetricValue(user.id, source, Number(metricPeriodDays) || null);
+            const metric = await computeMetricValue(user.id, source, Number(metricPeriodDays) || null, xAccountId);
             const updated = await prisma.kpiScenario.update({
                 where: { id, userId: user.id },
                 data: {
@@ -262,7 +275,7 @@ export async function POST(req: Request) {
             if (s.metricSource === "manual") {
                 return NextResponse.json({ scenario: s, note: "手動入力のシナリオです" });
             }
-            const metric = await computeMetricValue(user.id, s.metricSource, s.metricPeriodDays);
+            const metric = await computeMetricValue(user.id, s.metricSource, s.metricPeriodDays, xAccountId);
             if (!metric) return NextResponse.json({ scenario: s, note: "メトリクス計算に失敗" });
             const updated = await prisma.kpiScenario.update({
                 where: { id, userId: user.id },
@@ -271,13 +284,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ scenario: updated, note: metric.note });
 
         } else if (action === "sync_all") {
-            // 全自動ソースのシナリオを一括で再取得
+            // 全自動ソースのシナリオを一括で再取得（現在のサブアカウントに限定）
             const scenarios = await prisma.kpiScenario.findMany({
-                where: { userId: user.id, NOT: { metricSource: "manual" } },
+                where: { userId: user.id, xAccountId, NOT: { metricSource: "manual" } },
             });
             const results: Array<{ id: string; value: number; note?: string }> = [];
             for (const s of scenarios) {
-                const metric = await computeMetricValue(user.id, s.metricSource, s.metricPeriodDays);
+                const metric = await computeMetricValue(user.id, s.metricSource, s.metricPeriodDays, xAccountId);
                 if (metric) {
                     await prisma.kpiScenario.update({ where: { id: s.id }, data: { currentValue: metric.value } });
                     results.push({ id: s.id, value: metric.value, note: metric.note });

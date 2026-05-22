@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
@@ -17,8 +18,10 @@ export async function GET(req: Request) {
 
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const posts = await prisma.post.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, xAccountId },
             orderBy: { createdAt: 'desc' }
         });
 
@@ -67,9 +70,12 @@ export async function POST(req: Request) {
 
         const threadStyle = data.threadStyle === "impression_triggered" ? "impression_triggered" : "chain";
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const post = await prisma.post.create({
             data: {
                 userId: user.id,
+                xAccountId,
                 content: data.content,
                 platform: data.platform || "X",
                 status: data.status || "DRAFT",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
@@ -17,8 +18,10 @@ export async function GET(req: Request) {
 
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         const pastPosts = await prisma.pastPost.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, xAccountId },
             orderBy: { postedAt: 'desc' }
         });
 
@@ -44,11 +47,14 @@ export async function POST(req: Request) {
 
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        const xAccountId = await getActiveXAccountId(user.id);
+
         // 一括でモックデータを登録する処理 (検証用)
         if (data.action === "seed") {
             const seedData = [
                 {
                     userId: user.id,
+                    xAccountId,
                     content: "SNS集客の極意：実は「ターゲット」を決めるだけじゃダメ。そのターゲットが夜寝る前に何に悩んでいるか？まで解像度を上げないと反応は取れません。詳しいやり方はプロフリンクへ👇",
                     impressions: 1500,
                     conversions: 3,
@@ -57,6 +63,7 @@ export async function POST(req: Request) {
                 },
                 {
                     userId: user.id,
+                    xAccountId,
                     content: "今日はランチにお寿司を食べました！たまには息抜きも必要ですね。午後も頑張りましょう！",
                     impressions: 120,
                     conversions: 0,
@@ -65,6 +72,7 @@ export async function POST(req: Request) {
                 },
                 {
                     userId: user.id,
+                    xAccountId,
                     content: "【月商100万を超えるアカウントの共通点】\n1. 毎日決まった時間に発信\n2. 専門用語を使わない\n3. 結論から書く\n\nこれだけでインプレッションは倍増します。保存して明日から実践してくださいね✨",
                     impressions: 3200,
                     conversions: 5,
@@ -83,6 +91,7 @@ export async function POST(req: Request) {
         const post = await prisma.pastPost.create({
             data: {
                 userId: user.id,
+                xAccountId,
                 content: data.content,
                 impressions: data.impressions || 0,
                 conversions: data.conversions || 0,

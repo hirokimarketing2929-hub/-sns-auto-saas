@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
+import XAccountManager from "@/components/XAccountManager";
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
@@ -227,6 +228,14 @@ export default function SettingsPage() {
                     ※ AIペルソナ・運用方針などの設定は「ナレッジベース」画面に移動しました。
                 </p>
             </div>
+
+            {/* サブアカウント管理 — 無制限に追加可能 */}
+            <Card className="border-purple-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                <CardContent className="pt-6">
+                    <XAccountManager />
+                </CardContent>
+            </Card>
 
             {/* アカウント基本情報（最上部に独立） */}
             <Card className="border-indigo-200 shadow-sm relative overflow-hidden">

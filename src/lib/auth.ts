@@ -125,7 +125,7 @@ export const authOptions: NextAuthOptions = {
             }
 
             // 現ユーザーへ Account を upsert（同じ X アカウントの再連携なら token を更新）
-            await prisma.account.upsert({
+            const upsertedAccount = await prisma.account.upsert({
                 where: {
                     provider_providerAccountId: {
                         provider: account.provider,
@@ -157,8 +157,31 @@ export const authOptions: NextAuthOptions = {
                 },
             })
 
+            // 既存の XAccount にこの OAuth Account が紐付いていなければ、新規 XAccount を作成して紐付ける
+            const existingX = await (prisma as any).xAccount.findUnique({
+                where: { oauthAccountId: upsertedAccount.id },
+            }).catch(() => null);
+            if (!existingX) {
+                const profileName = (user as any)?.name as string | undefined;
+                const displayName = profileName ? `@${profileName.replace(/^@/, "")}` : "新規Xアカウント";
+                const created = await (prisma as any).xAccount.create({
+                    data: {
+                        userId: existingUserId,
+                        displayName,
+                        oauthAccountId: upsertedAccount.id,
+                        xUsername: profileName ?? null,
+                        xProfileImageUrl: (user as any)?.image ?? null,
+                    },
+                });
+                // 新規連携したアカウントを active に切替
+                await prisma.user.update({
+                    where: { id: existingUserId },
+                    data: { activeXAccountId: created.id },
+                }).catch(() => undefined);
+            }
+
             // 文字列を返すとサインインを中断してリダイレクト（= 既存セッション維持）
-            return "/dashboard/settings?linked=1"
+            return "/dashboard/settings?linked=1#x-accounts"
         },
         async session({ session, token }) {
             if (token && session.user) {
