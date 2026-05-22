@@ -630,7 +630,7 @@ export default function ResearchPage() {
                                                     {result.extracted_emotion}
                                                 </div>
                                                 <p className="text-xs text-slate-600 mt-1">
-                                                    読者の「熱量」を動かす感情の種類。FUN / WOW / 尊い / 癒し / 感動 / 知識 / あるある / 納得 / 主張 / 物申す / 応援 / 共感 / 驚愕 / 好奇心 / 危機感 / 欲求 の 16 ベクトルから採用されています。
+                                                    読者の「熱量」を動かす感情の種類。WOW / 尊い / FUN / 知っトク / 物申す / あるある / 応援 / WANT / 注意喚起 / 同調 / 真理 / 支援 / インセンティブ / 癒し / 感動 / ショック の 16 熱量（Twitter公式「拡散の科学」）から採用されています。
                                                 </p>
                                             </div>
                                         </div>

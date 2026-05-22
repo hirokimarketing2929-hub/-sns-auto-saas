@@ -210,7 +210,7 @@ function buildExtractUserText(sourceText: string): string {
         "```",
         "",
         "【出力形式】JSON オブジェクトのみ。",
-        `{"template": "プレースホルダ入りの骨格（改行・絵文字含めて元ポストと完全一致）", "placeholders": [{"key": "[テーマ]", "meaning": "この箇所に入れるべき内容の説明"}], "extracted_format": "投稿の型を一文で", "extracted_emotion": "感情ベクトル（FUN / WOW / 尊い / 癒し / 感動 / 知識 / あるある / 納得 / 主張 / 物申す / 応援 / 共感 / 驚愕 / 好奇心 / 危機感 / 欲求 から1〜2個）"}`,
+        `{"template": "プレースホルダ入りの骨格（改行・絵文字含めて元ポストと完全一致）", "placeholders": [{"key": "[テーマ]", "meaning": "この箇所に入れるべき内容の説明"}], "extracted_format": "投稿の型を一文で", "extracted_emotion": "感情の熱量（WOW / 尊い / FUN / 知っトク / 物申す / あるある / 応援 / WANT / 注意喚起 / 同調 / 真理 / 支援 / インセンティブ / 癒し / 感動 / ショック から1〜2個。Twitter公式『拡散の科学』の16熱量）"}`,
     ].join("\n");
 }
 
