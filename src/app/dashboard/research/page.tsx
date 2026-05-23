@@ -11,6 +11,8 @@ import { toast } from "sonner";
 
 type FetchedPost = {
     text: string;
+    segments?: string[]; // ツリー取得時の各セグメント（本人連投の本文配列）
+    isThread?: boolean;  // ツリー（2件以上の連投）として取得されたか
     author: { username: string | null; displayName: string | null };
     metrics: { likes: number; retweets: number; replies: number; quotes: number; impressions: number | null };
     tweetUrl: string | null;
@@ -63,6 +65,8 @@ export default function ResearchPage() {
     const [userTheme, setUserTheme] = useState("");
     // 任意CTA URL — 入力すると生成本文の末尾に自動付与される（LLMには生成させず後処理で付与）
     const [ctaUrl, setCtaUrl] = useState("");
+    // ツリー全体（本人連投スレッド）を取得するか — URL入力時のみ有効
+    const [fetchThread, setFetchThread] = useState(false);
 
     // 生成結果カードの編集状態
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -88,7 +92,7 @@ export default function ResearchPage() {
             const res = await fetch("/api/research/fetch-post", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ input: v }),
+                body: JSON.stringify({ input: v, thread: fetchThread }),
             });
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
@@ -391,6 +395,16 @@ export default function ResearchPage() {
                                             {isFetching ? <Loader2 className="animate-spin w-5 h-5" /> : "取得"}
                                         </Button>
                                     </div>
+                                    {/* ツリー全体取得トグル（URL指定時のみ有効。本人連投スレッドを連結して取得） */}
+                                    <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer mt-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={fetchThread}
+                                            onChange={(e) => setFetchThread(e.target.checked)}
+                                            className="w-4 h-4 accent-sky-600"
+                                        />
+                                        <span>🌲 ツリー全体を取得する（投稿URL指定時のみ。本人の連投スレッドを丸ごと分析対象に）</span>
+                                    </label>
                                     <p className="text-xs text-slate-500">
                                         ※ 設定画面の X API キー（BYOK）で認証。非公開アカウントは取得できません。
                                     </p>

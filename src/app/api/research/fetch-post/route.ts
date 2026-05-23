@@ -30,6 +30,8 @@ export async function POST(req: Request) {
 
         const data = await req.json();
         const rawInput: unknown = data?.input;
+        // ツリー全体（本人の連投スレッド）を取得するか。URL入力時のみ有効
+        const fetchThread: boolean = data?.thread === true;
         if (typeof rawInput !== "string" || !rawInput.trim()) {
             return NextResponse.json({ error: "@ユーザー名または投稿 URL を入力してください" }, { status: 400 });
         }
@@ -58,7 +60,8 @@ export async function POST(req: Request) {
             try {
                 const resp = await client.v2.singleTweet(tweetId, {
                     // note_tweet: X Premium の長文ポスト（280字超）の完全版本文を取得
-                    "tweet.fields": ["public_metrics", "created_at", "author_id", "note_tweet"],
+                    // conversation_id: スレッド検索に使用（ツリー取得モード時）
+                    "tweet.fields": ["public_metrics", "created_at", "author_id", "note_tweet", "conversation_id"],
                     expansions: ["author_id"],
                     "user.fields": ["username", "name"],
                 });
@@ -75,6 +78,8 @@ export async function POST(req: Request) {
                     id: string;
                     text: string;
                     created_at?: string;
+                    author_id?: string;
+                    conversation_id?: string;
                     note_tweet?: { text?: string };
                     public_metrics?: {
                         like_count?: number;
@@ -95,8 +100,52 @@ export async function POST(req: Request) {
 
                 const authorFromIncludes = (resp.includes?.users || [])[0] as { username?: string; name?: string } | undefined;
 
+                // ツリー対応: thread=true かつ conversation_id/author_id があれば、本人の連投スレッド全体を取得
+                let segments: string[] | undefined;
+                let isThread = false;
+                let combinedText = fullText;
+                if (fetchThread && tweet.conversation_id && tweet.author_id) {
+                    try {
+                        const searchResp = await client.v2.search(
+                            `conversation_id:${tweet.conversation_id} from:${tweet.author_id}`,
+                            {
+                                "tweet.fields": ["created_at", "note_tweet", "public_metrics"],
+                                max_results: 100,
+                                sort_order: "recency",
+                            }
+                        );
+                        const rlSearch = (searchResp as unknown as { rateLimit?: { limit?: number; remaining?: number; reset?: number } }).rateLimit;
+                        await logXApiUsage({ userId: user.id, operation: "x-conversation-search", rateLimit: rlSearch });
+                        const rawTweets = (searchResp.data?.data || []) as Array<{
+                            id: string;
+                            text: string;
+                            created_at?: string;
+                            note_tweet?: { text?: string };
+                        }>;
+                        // 元ポストも含めて重複排除＋作成時刻昇順
+                        const map = new Map<string, { id: string; text: string; created_at?: string }>();
+                        map.set(tweet.id, { id: tweet.id, text: fullText, created_at: tweet.created_at });
+                        for (const t of rawTweets) {
+                            map.set(t.id, { id: t.id, text: t.note_tweet?.text?.trim() || t.text, created_at: t.created_at });
+                        }
+                        const sorted = Array.from(map.values()).sort((a, b) => {
+                            const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+                            const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+                            return da - db;
+                        });
+                        segments = sorted.map(t => t.text);
+                        isThread = segments.length > 1;
+                        if (isThread) combinedText = segments.join("\n\n---\n\n");
+                    } catch (e) {
+                        // recent search は X API Basic 以上が必要。失敗時は単発取得にフォールバック
+                        console.warn("conversation search failed (fallback to single tweet):", (e as { data?: { title?: string } })?.data?.title || e);
+                    }
+                }
+
                 return NextResponse.json({
-                    text: fullText,
+                    text: combinedText,
+                    segments,
+                    isThread,
                     author: {
                         username: authorFromIncludes?.username ? `@${authorFromIncludes.username}` : null,
                         displayName: authorFromIncludes?.name || null,
