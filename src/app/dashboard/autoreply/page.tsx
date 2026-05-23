@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface AutoReplyCampaign {
     id: string;
@@ -85,12 +86,15 @@ export default function AutoReplyPage() {
     const fetchCampaigns = async () => {
         try {
             const res = await fetch("/api/autoreply");
-            const data = await res.json();
-            if (res.ok) {
-                setCampaigns(data.campaigns || []);
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                toast.error(data?.error || data?.message || "キャンペーン一覧の取得に失敗しました");
+                return;
             }
+            setCampaigns(data?.campaigns || []);
         } catch (error) {
             console.error("Failed to fetch campaigns", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsLoading(false);
         }
@@ -101,7 +105,7 @@ export default function AutoReplyPage() {
 
         // 最低1つはトリガーを選択しているかバリデーション
         if (!newIsTriggerRt && !newIsTriggerLike && !newIsTriggerReply) {
-            alert("発動トリガーは少なくとも1つ（RT、いいね、リプライのいずれか）を選択してください。");
+            toast.error("発動トリガーは少なくとも1つ（RT、いいね、リプライのいずれか）を選択してください。");
             return;
         }
 
@@ -109,11 +113,11 @@ export default function AutoReplyPage() {
 
         // 終了日時は必須
         if (!newEndsAt) {
-            alert("キャンペーン終了日時は必須です。");
+            toast.error("キャンペーン終了日時は必須です。");
             return;
         }
         if (new Date(newEndsAt).getTime() <= Date.now()) {
-            alert("キャンペーン終了日時は未来の時刻を指定してください。");
+            toast.error("キャンペーン終了日時は未来の時刻を指定してください。");
             return;
         }
         setIsSubmitting(true);
@@ -140,26 +144,31 @@ export default function AutoReplyPage() {
                     }
                 })
             });
-            if (res.ok) {
-                // フォームリセット
-                setNewName("");
-                setNewTargetUrl("");
-                setNewIsTriggerRt(false);
-                setNewIsTriggerLike(false);
-                setNewIsTriggerReply(false);
-                setNewKeyword("");
-                setNewReplyContent("");
-                setNewReplyType("MENTION");
-                setNewEndsAt("");
-                setNewCheckInterval(5);
-                setNewTriggerMode("OR");
-                setNewOpeningsText("");
-                setNewOpeningsCount(30);
-                setOpeningsGenError(null);
-                fetchCampaigns();
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                toast.error(data?.error || data?.message || "キャンペーンの作成に失敗しました");
+                return;
             }
+            toast.success("キャンペーンを作成しました");
+            // フォームリセット
+            setNewName("");
+            setNewTargetUrl("");
+            setNewIsTriggerRt(false);
+            setNewIsTriggerLike(false);
+            setNewIsTriggerReply(false);
+            setNewKeyword("");
+            setNewReplyContent("");
+            setNewReplyType("MENTION");
+            setNewEndsAt("");
+            setNewCheckInterval(5);
+            setNewTriggerMode("OR");
+            setNewOpeningsText("");
+            setNewOpeningsCount(30);
+            setOpeningsGenError(null);
+            fetchCampaigns();
         } catch (error) {
             console.error("Failed to create campaign", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -176,17 +185,24 @@ export default function AutoReplyPage() {
                     payload: { id }
                 })
             });
-            if (res.ok) fetchCampaigns();
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                toast.error(data?.error || data?.message || "削除に失敗しました");
+                return;
+            }
+            toast.success("キャンペーンを削除しました");
+            fetchCampaigns();
         } catch (error) {
             console.error("Failed to delete", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
 
     const handleToggleActive = async (id: string, currentStatus: boolean) => {
+        // UIを楽観的更新
+        setCampaigns(prev => prev.map(c => c.id === id ? { ...c, isActive: !currentStatus } : c));
         try {
-            // UIを楽観的更新
-            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, isActive: !currentStatus } : c));
-            await fetch("/api/autoreply", {
+            const res = await fetch("/api/autoreply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -194,16 +210,25 @@ export default function AutoReplyPage() {
                     payload: { id, isActive: !currentStatus }
                 })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "稼働状態の更新に失敗しました");
+                // ロールバック
+                setCampaigns(prev => prev.map(c => c.id === id ? { ...c, isActive: currentStatus } : c));
+            }
         } catch (error) {
             console.error("Failed to toggle", error);
-            fetchCampaigns(); // 失敗したら元に戻す
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
+            // ロールバック
+            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, isActive: currentStatus } : c));
         }
     };
 
     const handleUpdateTriggerMode = async (id: string, mode: "OR" | "AND") => {
+        const prevCampaigns = campaigns;
+        setCampaigns(prev => prev.map(c => c.id === id ? { ...c, triggerMode: mode } : c));
         try {
-            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, triggerMode: mode } : c));
-            await fetch("/api/autoreply", {
+            const res = await fetch("/api/autoreply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -211,16 +236,23 @@ export default function AutoReplyPage() {
                     payload: { id, triggerMode: mode }
                 })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "判定方式の更新に失敗しました");
+                setCampaigns(prevCampaigns);
+            }
         } catch (error) {
             console.error("Failed to update trigger mode", error);
-            fetchCampaigns();
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
+            setCampaigns(prevCampaigns);
         }
     };
 
     const handleUpdateInterval = async (id: string, minutes: number) => {
+        const prevCampaigns = campaigns;
+        setCampaigns(prev => prev.map(c => c.id === id ? { ...c, checkIntervalMinutes: minutes } : c));
         try {
-            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, checkIntervalMinutes: minutes } : c));
-            await fetch("/api/autoreply", {
+            const res = await fetch("/api/autoreply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -228,17 +260,24 @@ export default function AutoReplyPage() {
                     payload: { id, checkIntervalMinutes: minutes }
                 })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "チェック間隔の更新に失敗しました");
+                setCampaigns(prevCampaigns);
+            }
         } catch (error) {
             console.error("Failed to update interval", error);
-            fetchCampaigns();
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
+            setCampaigns(prevCampaigns);
         }
     };
 
     const handleUpdateEndDate = async (id: string, datetimeLocalValue: string) => {
         const iso = datetimeLocalValue ? new Date(datetimeLocalValue).toISOString() : null;
+        const prevCampaigns = campaigns;
+        setCampaigns(prev => prev.map(c => c.id === id ? { ...c, endsAt: iso } : c));
         try {
-            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, endsAt: iso } : c));
-            await fetch("/api/autoreply", {
+            const res = await fetch("/api/autoreply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -246,9 +285,15 @@ export default function AutoReplyPage() {
                     payload: { id, endsAt: iso }
                 })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "終了日時の更新に失敗しました");
+                setCampaigns(prevCampaigns);
+            }
         } catch (error) {
             console.error("Failed to update end date", error);
-            fetchCampaigns();
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
+            setCampaigns(prevCampaigns);
         }
     };
 
@@ -344,6 +389,7 @@ export default function AutoReplyPage() {
                 ? { ...c, openingVariants: variants.length > 0 ? JSON.stringify(variants) : null, openingsSentCount: 0 }
                 : c));
             setOpeningsPanelOpen(prev => ({ ...prev, [campaign.id]: false }));
+            toast.success(variants.length > 0 ? `冒頭バリエーション ${variants.length} 通りを保存しました` : "冒頭バリエーションをクリアしました");
         } catch (err) {
             setOpeningsEditError(prev => ({ ...prev, [campaign.id]: err instanceof Error ? err.message : String(err) }));
         } finally {
@@ -848,7 +894,7 @@ export default function AutoReplyPage() {
                                             variant={effectiveActive ? "outline" : "default"}
                                             onClick={() => {
                                                 if (isExpired && !campaign.isActive) {
-                                                    alert("このキャンペーンは終了日時を過ぎています。再開するには終了日時を未来の時刻に更新してください。");
+                                                    toast.error("このキャンペーンは終了日時を過ぎています。再開するには終了日時を未来の時刻に更新してください。");
                                                     return;
                                                 }
                                                 handleToggleActive(campaign.id, campaign.isActive);
