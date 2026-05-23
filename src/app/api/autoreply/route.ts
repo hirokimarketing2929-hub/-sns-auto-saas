@@ -3,6 +3,27 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+// 冒頭バリエーション（最大100通り）を payload から取り出して JSON 文字列化する。
+// 受け取り形式は string[]（推奨）/ 改行区切りの単一 string / それ以外（null扱い）に対応。
+const MAX_OPENING_VARIANTS = 100;
+function normalizeOpeningVariants(raw: unknown): string | null {
+    let arr: string[] = [];
+    if (Array.isArray(raw)) {
+        arr = raw.filter((s): s is string => typeof s === "string");
+    } else if (typeof raw === "string") {
+        // 改行区切りの textarea からの入力を許容
+        arr = raw.split(/\r?\n/);
+    } else {
+        return null;
+    }
+    const cleaned = arr
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        .slice(0, MAX_OPENING_VARIANTS);
+    if (cleaned.length === 0) return null;
+    return JSON.stringify(cleaned);
+}
+
 // キャンペーン一覧の取得
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
@@ -58,8 +79,9 @@ export async function POST(req: Request) {
         const { action, payload } = await req.json();
 
         if (action === "create") {
-            const { name, targetUrl, isTriggerRt, isTriggerLike, isTriggerReply, keyword, replyContent, replyType, endsAt, checkIntervalMinutes, triggerMode } = payload;
+            const { name, targetUrl, isTriggerRt, isTriggerLike, isTriggerReply, keyword, replyContent, replyType, endsAt, checkIntervalMinutes, triggerMode, openingVariants } = payload;
             const safeTriggerMode = triggerMode === "AND" ? "AND" : "OR";
+            const normalizedOpenings = normalizeOpeningVariants(openingVariants);
 
             // チェック間隔のバリデーション（1, 5, 15, 30, 60 のみ許可）
             const allowedIntervals = [1, 5, 15, 30, 60];
@@ -93,6 +115,8 @@ export async function POST(req: Request) {
                     endsAt: endsAtDate,
                     checkIntervalMinutes: safeInterval,
                     triggerMode: safeTriggerMode,
+                    openingVariants: normalizedOpenings,
+                    openingsSentCount: 0,
                 }
             });
             return NextResponse.json({ campaign: newCampaign });
@@ -146,6 +170,17 @@ export async function POST(req: Request) {
             const updated = await db.autoReplyCampaign.update({
                 where: { id, userId: user.id },
                 data: { triggerMode: safe }
+            });
+            return NextResponse.json({ campaign: updated });
+
+        } else if (action === "update_opening_variants") {
+            // 冒頭バリエーションの差し替え。リストが変わったら循環インデックスは 0 にリセットする
+            // （別のリストに同じ index を使うと意図しない先頭文を再利用してしまうため）。
+            const { id, openingVariants } = payload;
+            const normalized = normalizeOpeningVariants(openingVariants);
+            const updated = await db.autoReplyCampaign.update({
+                where: { id, userId: user.id },
+                data: { openingVariants: normalized, openingsSentCount: 0 }
             });
             return NextResponse.json({ campaign: updated });
         }
