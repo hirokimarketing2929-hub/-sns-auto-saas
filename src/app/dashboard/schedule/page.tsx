@@ -36,6 +36,8 @@ export default function SchedulePage() {
     const [loading, setLoading] = useState(true);
     const [publishing, setPublishing] = useState<string | null>(null);
     const [schedulingDates, setSchedulingDates] = useState<Record<string, string>>({});
+    // Post.id → 過去30日の連携件数（FunnelEvent.utmCampaign="post_<id>" 逆引き）
+    const [attribution, setAttribution] = useState<Record<string, number>>({});
 
     // 編集関連のステート
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -57,8 +59,18 @@ export default function SchedulePage() {
         try {
             const res = await fetch("/api/posts");
             if (res.ok) {
-                const data = await res.json();
+                const data: PostData[] = await res.json();
                 setPosts(data);
+                // 取得した投稿IDで連携貢献をバッチ問い合わせ（失敗してもページは表示）
+                const ids = data.map(p => p.id);
+                if (ids.length > 0) {
+                    fetch(`/api/funnel/post-attribution?postIds=${encodeURIComponent(ids.join(","))}&days=30`)
+                        .then(r => r.ok ? r.json() : null)
+                        .then(j => {
+                            if (j && j.byPostId) setAttribution(j.byPostId);
+                        })
+                        .catch(() => { /* 表示には影響させない */ });
+                }
             }
         } catch (error) {
             console.error("Failed to fetch posts:", error);
@@ -292,12 +304,18 @@ export default function SchedulePage() {
                                 <CardHeader className="pb-3">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <CardTitle className="text-lg flex items-center gap-2">
+                                            <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
                                                 {post.platform} 用投稿
                                                 {post.status === 'DRAFT' && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">承認待ち (下書き)</Badge>}
                                                 {post.status === 'SCHEDULED' && <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">予約済み</Badge>}
                                                 {post.status === 'PUBLISHED' && <Badge variant="default" className="bg-green-600 hover:bg-green-600">投稿完了</Badge>}
                                                 {isEditing && <Badge variant="secondary" className="bg-purple-100 text-purple-800 hover:bg-purple-100">編集中</Badge>}
+                                                {/* 過去30日のこの投稿経由の連携件数（utm_campaign=post_<id> 逆引き） */}
+                                                {attribution[post.id] > 0 && (
+                                                    <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600" title="過去30日の連携件数（utm_campaign=post_<id> 逆引き）">
+                                                        🎯 連携 {attribution[post.id]} 件
+                                                    </Badge>
+                                                )}
                                             </CardTitle>
                                             <CardDescription className="mt-1 flex flex-col gap-1">
                                                 <span>作成日時: {new Date(post.createdAt).toLocaleString()}</span>

@@ -109,6 +109,43 @@ export default async function DashboardPage() {
     const totalTokens = (v: typeof todayUsage) => (v.llmIn + v.llmOut).toLocaleString();
     const costLabel = (v: typeof todayUsage) => `$${v.llmCost.toFixed(4)}`;
 
+    // 過去30日の「どの投稿が連携を生んだか」TOP10。utm_campaign="post_<id>" で逆引き。
+    const last30Days = new Date(now);
+    last30Days.setDate(now.getDate() - 30);
+    const attributionGrouped = await prisma.funnelEvent.groupBy({
+        by: ["utmCampaign"],
+        where: {
+            userId: user.id,
+            occurredAt: { gte: last30Days },
+            utmCampaign: { startsWith: "post_" },
+        },
+        _count: { _all: true },
+        orderBy: { _count: { utmCampaign: "desc" } },
+        take: 10,
+    });
+    const attributionPostIds = attributionGrouped
+        .map(g => g.utmCampaign ? g.utmCampaign.slice("post_".length) : "")
+        .filter(id => id.length > 0);
+    const attributionPosts = attributionPostIds.length > 0
+        ? await prisma.post.findMany({
+            where: { id: { in: attributionPostIds }, userId: user.id },
+            select: { id: true, content: true, status: true, postedTweetId: true, createdAt: true },
+        })
+        : [];
+    const attributionPostMap = new Map(attributionPosts.map(p => [p.id, p]));
+    const topAttributedPosts = attributionGrouped.map(g => {
+        const postId = g.utmCampaign ? g.utmCampaign.slice("post_".length) : "";
+        const p = attributionPostMap.get(postId);
+        return {
+            postId,
+            count: g._count._all,
+            content: p?.content ?? null,
+            status: p?.status ?? null,
+            postedTweetId: p?.postedTweetId ?? null,
+            createdAt: p?.createdAt ?? null,
+        };
+    });
+
     return (
         <div className="space-y-8 max-w-6xl mx-auto pb-10 animate-fade-up">
             {/* Header */}
@@ -219,6 +256,56 @@ export default async function DashboardPage() {
                         <p className="text-xs text-muted-foreground mt-3">
                             まだ登録データが届いていません。<Link href="/dashboard/settings" className="text-purple-400 hover:underline">設定画面</Link>から webhook を設定してください。
                         </p>
+                    )}
+                </div>
+            </div>
+
+            {/* 投稿別の連携貢献 TOP10（過去30日 / utm_campaign=post_<id> で逆引き） */}
+            <div className="animate-fade-up-delay-1">
+                <div className="flex items-center gap-2 mb-4">
+                    <BarChart3 className="size-4 text-amber-400" />
+                    <h3 className="text-lg font-semibold text-foreground/80">投稿別の連携貢献 TOP10</h3>
+                    <span className="text-xs text-muted-foreground">（過去30日 / どの投稿が連携を生んだか）</span>
+                </div>
+                <div className="glass rounded-2xl p-5">
+                    {topAttributedPosts.length === 0 ? (
+                        <div className="text-sm text-muted-foreground py-6 text-center">
+                            まだ投稿経由の連携データがありません。<br />
+                            <span className="text-xs">
+                                新しく投稿を作成して X に流すと、ProX が CTA URL に <code className="bg-white/10 px-1 rounded">utm_campaign=post_&lt;id&gt;</code> を自動付与し、ここに投稿別の連携数が見えるようになります。
+                            </span>
+                        </div>
+                    ) : (
+                        <ol className="space-y-2">
+                            {topAttributedPosts.map((p, i) => (
+                                <li key={p.postId} className="flex items-start gap-3 p-2 rounded hover:bg-white/5 transition-colors">
+                                    <span className="text-xs font-bold text-muted-foreground w-6 shrink-0 mt-0.5">#{i + 1}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm text-foreground/90 line-clamp-2 break-words">
+                                            {p.content ? p.content.slice(0, 140) : <span className="text-muted-foreground italic">（投稿が削除されています / id: {p.postId}）</span>}
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                                            {p.status && <span>{p.status}</span>}
+                                            {p.createdAt && <span>{new Date(p.createdAt).toLocaleDateString()}</span>}
+                                            {p.postedTweetId && (
+                                                <a
+                                                    href={`https://x.com/i/web/status/${p.postedTweetId}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="text-blue-400 hover:underline"
+                                                >
+                                                    X で見る ↗
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <div className="text-lg font-bold text-emerald-300">{p.count}</div>
+                                        <div className="text-[10px] text-muted-foreground">件</div>
+                                    </div>
+                                </li>
+                            ))}
+                        </ol>
                     )}
                 </div>
             </div>
