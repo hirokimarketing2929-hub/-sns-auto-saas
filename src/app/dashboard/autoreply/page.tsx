@@ -19,7 +19,25 @@ interface AutoReplyCampaign {
     checkIntervalMinutes: number;
     lastCheckedAt: string | null;
     triggerMode: "OR" | "AND" | string;
+    openingVariants: string | null;   // JSON string[] (最大100通り)。null/空なら冒頭バリエーション未使用。
+    openingsSentCount: number;        // 循環インデックス（送信ごとに +1。バリエーション数で剰余を取って利用）
     createdAt: string;
+}
+
+// openingVariants（DB上はJSON文字列）を UI 表示用の string[] に変換する。
+function parseOpeningVariants(raw: string | null | undefined): string[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === "string") : [];
+    } catch {
+        return [];
+    }
+}
+
+// textarea の各行を 1 バリエーションとして扱う。
+function linesToVariants(text: string): string[] {
+    return text.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
 }
 
 const INTERVAL_OPTIONS: { value: number; label: string; note: string; warn?: boolean }[] = [
@@ -46,6 +64,19 @@ export default function AutoReplyPage() {
     const [newEndsAt, setNewEndsAt] = useState(""); // datetime-local 形式 or 空文字
     const [newCheckInterval, setNewCheckInterval] = useState<number>(5);
     const [newTriggerMode, setNewTriggerMode] = useState<"OR" | "AND">("OR");
+
+    // 冒頭バリエーション（任意・最大100通り）。1行＝1バリエーション。
+    const [newOpeningsText, setNewOpeningsText] = useState("");
+    const [newOpeningsCount, setNewOpeningsCount] = useState<number>(30);
+    const [isGeneratingOpenings, setIsGeneratingOpenings] = useState(false);
+    const [openingsGenError, setOpeningsGenError] = useState<string | null>(null);
+
+    // 既存キャンペーンの編集パネル展開状態（id → boolean）と編集中テキスト・ローディング
+    const [openingsPanelOpen, setOpeningsPanelOpen] = useState<Record<string, boolean>>({});
+    const [openingsEditText, setOpeningsEditText] = useState<Record<string, string>>({});
+    const [openingsEditCount, setOpeningsEditCount] = useState<Record<string, number>>({});
+    const [openingsEditLoading, setOpeningsEditLoading] = useState<Record<string, boolean>>({});
+    const [openingsEditError, setOpeningsEditError] = useState<Record<string, string | null>>({});
 
     useEffect(() => {
         fetchCampaigns();
@@ -105,6 +136,7 @@ export default function AutoReplyPage() {
                         endsAt: newEndsAt ? new Date(newEndsAt).toISOString() : null,
                         checkIntervalMinutes: newCheckInterval,
                         triggerMode: newTriggerMode,
+                        openingVariants: linesToVariants(newOpeningsText),
                     }
                 })
             });
@@ -121,6 +153,9 @@ export default function AutoReplyPage() {
                 setNewEndsAt("");
                 setNewCheckInterval(5);
                 setNewTriggerMode("OR");
+                setNewOpeningsText("");
+                setNewOpeningsCount(30);
+                setOpeningsGenError(null);
                 fetchCampaigns();
             }
         } catch (error) {
@@ -214,6 +249,105 @@ export default function AutoReplyPage() {
         } catch (error) {
             console.error("Failed to update end date", error);
             fetchCampaigns();
+        }
+    };
+
+    // 新規作成フォームの「冒頭バリエーション」を AI で量産する
+    const handleGenerateOpeningsForNew = async () => {
+        if (!newReplyContent.trim()) {
+            setOpeningsGenError("先に共通CTA本文を入力してください。");
+            return;
+        }
+        setIsGeneratingOpenings(true);
+        setOpeningsGenError(null);
+        try {
+            const res = await fetch("/api/autoreply/generate-openings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ replyContent: newReplyContent, count: newOpeningsCount }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setOpeningsGenError(data?.error || "AI 生成に失敗しました。");
+                return;
+            }
+            const generated: string[] = Array.isArray(data?.openings) ? data.openings : [];
+            // 既存の入力を残しつつ末尾に追記（重複は除く）
+            const existing = linesToVariants(newOpeningsText);
+            const merged = Array.from(new Set([...existing, ...generated])).slice(0, 100);
+            setNewOpeningsText(merged.join("\n"));
+        } catch (err) {
+            setOpeningsGenError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setIsGeneratingOpenings(false);
+        }
+    };
+
+    // 既存キャンペーンの編集パネルを開く（初回時は DB のバリエーションをテキストに展開）
+    const toggleOpeningsPanel = (campaign: AutoReplyCampaign) => {
+        const next = !openingsPanelOpen[campaign.id];
+        setOpeningsPanelOpen(prev => ({ ...prev, [campaign.id]: next }));
+        if (next && openingsEditText[campaign.id] === undefined) {
+            const list = parseOpeningVariants(campaign.openingVariants);
+            setOpeningsEditText(prev => ({ ...prev, [campaign.id]: list.join("\n") }));
+            setOpeningsEditCount(prev => ({ ...prev, [campaign.id]: 30 }));
+        }
+    };
+
+    // 既存キャンペーン用の AI 量産
+    const handleGenerateOpeningsForExisting = async (campaign: AutoReplyCampaign) => {
+        setOpeningsEditLoading(prev => ({ ...prev, [campaign.id]: true }));
+        setOpeningsEditError(prev => ({ ...prev, [campaign.id]: null }));
+        try {
+            const res = await fetch("/api/autoreply/generate-openings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ replyContent: campaign.replyContent, count: openingsEditCount[campaign.id] ?? 30 }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setOpeningsEditError(prev => ({ ...prev, [campaign.id]: data?.error || "AI 生成に失敗しました。" }));
+                return;
+            }
+            const generated: string[] = Array.isArray(data?.openings) ? data.openings : [];
+            const existing = linesToVariants(openingsEditText[campaign.id] || "");
+            const merged = Array.from(new Set([...existing, ...generated])).slice(0, 100);
+            setOpeningsEditText(prev => ({ ...prev, [campaign.id]: merged.join("\n") }));
+        } catch (err) {
+            setOpeningsEditError(prev => ({ ...prev, [campaign.id]: err instanceof Error ? err.message : String(err) }));
+        } finally {
+            setOpeningsEditLoading(prev => ({ ...prev, [campaign.id]: false }));
+        }
+    };
+
+    // 既存キャンペーンの冒頭バリエーションを保存（リスト変更時は cron 側で循環カウンタが 0 リセットされる）
+    const handleSaveOpenings = async (campaign: AutoReplyCampaign) => {
+        const variants = linesToVariants(openingsEditText[campaign.id] || "");
+        setOpeningsEditLoading(prev => ({ ...prev, [campaign.id]: true }));
+        setOpeningsEditError(prev => ({ ...prev, [campaign.id]: null }));
+        try {
+            const res = await fetch("/api/autoreply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "update_opening_variants",
+                    payload: { id: campaign.id, openingVariants: variants },
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setOpeningsEditError(prev => ({ ...prev, [campaign.id]: data?.message || "保存に失敗しました。" }));
+                return;
+            }
+            // ローカル state を反映
+            setCampaigns(prev => prev.map(c => c.id === campaign.id
+                ? { ...c, openingVariants: variants.length > 0 ? JSON.stringify(variants) : null, openingsSentCount: 0 }
+                : c));
+            setOpeningsPanelOpen(prev => ({ ...prev, [campaign.id]: false }));
+        } catch (err) {
+            setOpeningsEditError(prev => ({ ...prev, [campaign.id]: err instanceof Error ? err.message : String(err) }));
+        } finally {
+            setOpeningsEditLoading(prev => ({ ...prev, [campaign.id]: false }));
         }
     };
 
@@ -376,6 +510,50 @@ export default function AutoReplyPage() {
                             <p className="text-xs text-muted-foreground mt-1">
                                 ※ 入力した内容がそのまま送信されます。同一ユーザーには二重送信されません。
                             </p>
+                        </div>
+
+                        {/* 冒頭バリエーション（任意・最大100通り） */}
+                        <div className="border border-amber-500/20 bg-amber-500/5 rounded-md p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-sm font-medium text-foreground/80">🎭 冒頭バリエーション（任意・最大100通り）</span>
+                                <span className="text-[10px] text-muted-foreground">— 1行＝1バリエーション</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">
+                                同じ文面を大量送信するとスパム判定されやすくなります。受信者ごとに少しずつ違う冒頭文（例:「いいねありがとうございます！」「気になっていただけて嬉しいです🙌」）を用意すると、自然なやりとりに見えて凍結リスクを下げられます。<br />
+                                冒頭文の後ろに上の共通CTA本文が連結されて送信されます。空欄なら従来通り共通CTA本文だけが送信されます。
+                            </p>
+                            <textarea
+                                value={newOpeningsText}
+                                onChange={(e) => setNewOpeningsText(e.target.value)}
+                                placeholder={`いいねありがとうございます！\n気になっていただけて嬉しいです🙌\nリポストありがとうございます〜`}
+                                rows={4}
+                                className="w-full min-h-[5rem] border border-input bg-background px-3 py-2 text-sm rounded-md resize-y"
+                            />
+                            <div className="flex items-center gap-2 flex-wrap mt-2">
+                                <label className="text-xs text-muted-foreground">AI で量産:</label>
+                                <select
+                                    value={newOpeningsCount}
+                                    onChange={(e) => setNewOpeningsCount(Number(e.target.value))}
+                                    className="h-8 border border-input bg-background px-2 py-1 text-xs rounded-md cursor-pointer"
+                                >
+                                    {[10, 20, 30, 50, 80, 100].map(n => <option key={n} value={n}>{n}通り</option>)}
+                                </select>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleGenerateOpeningsForNew}
+                                    disabled={isGeneratingOpenings || !newReplyContent.trim()}
+                                    className="h-8 text-xs"
+                                >
+                                    {isGeneratingOpenings ? "生成中..." : "✨ AI で量産"}
+                                </Button>
+                                <span className="text-xs text-muted-foreground">
+                                    現在: {linesToVariants(newOpeningsText).length} 通り
+                                </span>
+                            </div>
+                            {openingsGenError && (
+                                <p className="text-xs text-red-400 mt-2">{openingsGenError}</p>
+                            )}
                         </div>
 
                         {/* チェック間隔 */}
@@ -575,6 +753,89 @@ export default function AutoReplyPage() {
                                                 </select>
                                             </div>
                                         )}
+
+                                        {/* 冒頭バリエーション（任意・最大100通り） */}
+                                        {(() => {
+                                            const variants = parseOpeningVariants(campaign.openingVariants);
+                                            const sent = campaign.openingsSentCount ?? 0;
+                                            const cyclePos = variants.length > 0 ? (sent % variants.length) + 1 : 0;
+                                            const isOpen = !!openingsPanelOpen[campaign.id];
+                                            const editText = openingsEditText[campaign.id] ?? "";
+                                            const editCount = openingsEditCount[campaign.id] ?? 30;
+                                            const editLoading = !!openingsEditLoading[campaign.id];
+                                            const editError = openingsEditError[campaign.id];
+                                            return (
+                                                <div className="flex flex-col gap-2 text-xs pt-1">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-muted-foreground shrink-0">🎭 冒頭バリエーション:</span>
+                                                        {variants.length > 0 ? (
+                                                            <>
+                                                                <span className="bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded text-xs font-bold border border-amber-500/30">
+                                                                    {variants.length} 通り
+                                                                </span>
+                                                                <span className="text-muted-foreground/70 text-[10px]">
+                                                                    次回送信: {cyclePos}/{variants.length}（送信済 {sent}）
+                                                                </span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-muted-foreground/70 text-[10px]">未設定（共通CTA本文のみ送信）</span>
+                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleOpeningsPanel(campaign)}
+                                                            className="text-[11px] underline text-blue-400 hover:text-blue-300 ml-1"
+                                                        >
+                                                            {isOpen ? "閉じる" : "編集"}
+                                                        </button>
+                                                    </div>
+                                                    {isOpen && (
+                                                        <div className="border border-amber-500/20 bg-amber-500/5 rounded-md p-3 space-y-2">
+                                                            <p className="text-[11px] text-muted-foreground">
+                                                                1行＝1バリエーション。保存すると循環カウンタは 0 にリセットされます（差し替え後の先頭から送信）。
+                                                            </p>
+                                                            <textarea
+                                                                value={editText}
+                                                                onChange={(e) => setOpeningsEditText(prev => ({ ...prev, [campaign.id]: e.target.value }))}
+                                                                rows={5}
+                                                                className="w-full min-h-[6rem] border border-input bg-background px-3 py-2 text-xs rounded-md resize-y"
+                                                                placeholder={`いいねありがとうございます！\nリポストありがとうございます🙌`}
+                                                            />
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <label className="text-[11px] text-muted-foreground">AI で量産:</label>
+                                                                <select
+                                                                    value={editCount}
+                                                                    onChange={(e) => setOpeningsEditCount(prev => ({ ...prev, [campaign.id]: Number(e.target.value) }))}
+                                                                    className="h-7 border border-input bg-background px-2 py-0.5 text-[11px] rounded-md cursor-pointer"
+                                                                >
+                                                                    {[10, 20, 30, 50, 80, 100].map(n => <option key={n} value={n}>{n}通り</option>)}
+                                                                </select>
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    onClick={() => handleGenerateOpeningsForExisting(campaign)}
+                                                                    disabled={editLoading}
+                                                                    className="h-7 text-[11px]"
+                                                                >
+                                                                    {editLoading ? "処理中..." : "✨ AI で量産"}
+                                                                </Button>
+                                                                <span className="text-[11px] text-muted-foreground">
+                                                                    現在: {linesToVariants(editText).length} 通り
+                                                                </span>
+                                                                <Button
+                                                                    type="button"
+                                                                    onClick={() => handleSaveOpenings(campaign)}
+                                                                    disabled={editLoading}
+                                                                    className="h-7 text-[11px] ml-auto"
+                                                                >
+                                                                    保存
+                                                                </Button>
+                                                            </div>
+                                                            {editError && <p className="text-[11px] text-red-400">{editError}</p>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                     <div className="w-full md:w-1/3 bg-white/5 p-3 rounded-md border border-white/10 text-sm text-foreground/80 max-h-24 overflow-y-auto">
