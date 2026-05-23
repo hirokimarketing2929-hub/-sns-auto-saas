@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
+import { applyUtmToContent, postCampaignTag } from "@/lib/utm";
 
 export async function GET(req: Request) {
     const session = await getServerSession(authOptions);
@@ -72,6 +73,14 @@ export async function POST(req: Request) {
 
         const xAccountId = await getActiveXAccountId(user.id);
 
+        // CTA URL は投稿先 XAccount から取得（未設定の場合は付与処理スキップ）
+        const xAccount = xAccountId
+            ? await prisma.xAccount.findUnique({ where: { id: xAccountId }, select: { ctaUrl: true } })
+            : null;
+        const ctaUrl = xAccount?.ctaUrl ?? null;
+
+        // 一旦そのまま作成して Post.id を得る。スレッド投稿の各セグメントにも CTA URL が含まれ得るので
+        // create 後に content と threadContents に UTM を一括付与する。
         const post = await prisma.post.create({
             data: {
                 userId: user.id,
@@ -90,6 +99,44 @@ export async function POST(req: Request) {
                         : null,
             }
         });
+
+        // UTM 後付け: content / threadContents / impressionReplyContent に含まれる CTA URL に
+        // utm_source=x & utm_campaign=post_<id> を付与する。CTA URL が未設定なら content は変わらない。
+        if (ctaUrl) {
+            const utmParams = { utm_source: "x", utm_campaign: postCampaignTag(post.id) };
+            const rewrittenContent = applyUtmToContent(post.content, ctaUrl, utmParams);
+            let rewrittenThreads: string | null = post.threadContents;
+            if (post.threadContents) {
+                try {
+                    const arr = JSON.parse(post.threadContents);
+                    if (Array.isArray(arr)) {
+                        const rewritten = arr.map((s: unknown) =>
+                            typeof s === "string" ? applyUtmToContent(s, ctaUrl, utmParams) : s
+                        );
+                        rewrittenThreads = JSON.stringify(rewritten);
+                    }
+                } catch { /* 不正JSONは触らない */ }
+            }
+            const rewrittenImpReply = post.impressionReplyContent
+                ? applyUtmToContent(post.impressionReplyContent, ctaUrl, utmParams)
+                : post.impressionReplyContent;
+
+            const changed =
+                rewrittenContent !== post.content ||
+                rewrittenThreads !== post.threadContents ||
+                rewrittenImpReply !== post.impressionReplyContent;
+            if (changed) {
+                const updated = await prisma.post.update({
+                    where: { id: post.id },
+                    data: {
+                        content: rewrittenContent,
+                        threadContents: rewrittenThreads,
+                        impressionReplyContent: rewrittenImpReply,
+                    },
+                });
+                return NextResponse.json(updated);
+            }
+        }
 
         return NextResponse.json(post);
     } catch (error) {

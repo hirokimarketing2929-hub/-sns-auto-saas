@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { applyUtmToContent, postCampaignTag } from "@/lib/utm";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const session = await getServerSession(authOptions);
@@ -120,6 +121,33 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
         if (Object.keys(updateData).length === 0) {
             return NextResponse.json({ message: "更新対象のフィールドが指定されていません" }, { status: 400 });
+        }
+
+        // 編集対象の text フィールドに含まれる CTA URL に UTM を再適用する。
+        // ユーザーが本文を書き換えて新たに CTA URL を貼ったケース、または旧 CTA URL が残っているケースで
+        // utm_campaign=post_<id> が確実に付くようにする（既存 utm パラメータは上書き）。
+        const xAccount = post.xAccountId
+            ? await prisma.xAccount.findUnique({ where: { id: post.xAccountId }, select: { ctaUrl: true } })
+            : null;
+        const ctaUrl = xAccount?.ctaUrl ?? null;
+        if (ctaUrl) {
+            const utmParams = { utm_source: "x", utm_campaign: postCampaignTag(postId) };
+            if (typeof updateData.content === "string") {
+                updateData.content = applyUtmToContent(updateData.content, ctaUrl, utmParams);
+            }
+            if (typeof updateData.impressionReplyContent === "string") {
+                updateData.impressionReplyContent = applyUtmToContent(updateData.impressionReplyContent, ctaUrl, utmParams);
+            }
+            if (typeof updateData.threadContents === "string") {
+                try {
+                    const arr = JSON.parse(updateData.threadContents);
+                    if (Array.isArray(arr)) {
+                        updateData.threadContents = JSON.stringify(
+                            arr.map((s: unknown) => typeof s === "string" ? applyUtmToContent(s, ctaUrl, utmParams) : s)
+                        );
+                    }
+                } catch { /* 不正JSONは触らない */ }
+            }
         }
 
         const updatedPost = await prisma.post.update({
