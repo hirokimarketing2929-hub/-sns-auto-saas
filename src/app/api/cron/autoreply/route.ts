@@ -4,6 +4,32 @@ import { getTwitterClient } from "@/lib/twitter";
 import { TwitterApi } from "twitter-api-v2";
 import { logXApiUsage } from "@/lib/api-usage";
 
+/**
+ * ポストバン回避用: 冒頭バリエーション（最大100通り）を JSON 配列から安全にパース。
+ * 不正JSON・空文字・非string要素はフィルタする。
+ */
+function parseOpeningVariants(raw: unknown): string[] {
+    if (typeof raw !== "string" || !raw.trim()) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * 冒頭バリエーションが設定されていれば「冒頭 + 改行 + 共通CTA」を組み立て、
+ * 未設定なら共通CTA（replyContent）のみを返す（後方互換）。
+ * index は openingsSentCount を基準に循環（100通り使い切ったら再利用）。
+ */
+function buildReplyText(variants: string[], index: number, replyContent: string): string {
+    if (variants.length === 0) return replyContent;
+    const opening = variants[index % variants.length];
+    return `${opening}\n\n${replyContent}`;
+}
+
 export async function GET(req: Request) {
     // Vercel Cron / 手動トリガーのみ許可
     const authHeader = req.headers.get("authorization");
@@ -59,6 +85,12 @@ export async function GET(req: Request) {
         // キャンペーンごとに処理を実行
         for (const campaign of activeCampaigns) {
             const { targetUrl, isTriggerRt, isTriggerLike, isTriggerReply, keyword, replyContent } = campaign;
+
+            // ポストバン回避: 冒頭バリエーション（最大100通り）と循環インデックスを準備。
+            // openingVariants が空なら従来通り replyContent のみを送信する（後方互換）。
+            const openingVariants = parseOpeningVariants((campaign as any).openingVariants);
+            const startingOpeningIndex = (campaign as any).openingsSentCount ?? 0;
+            let localOpeningsSent = 0;
 
             // URLからポストIDを抽出
             const postIdMatch = targetUrl.match(/status\/(\d+)/);
@@ -226,8 +258,10 @@ export async function GET(req: Request) {
                                 runLogs.push(`⏭️ Skip self-DM for ${targetUser.userId} (@${targetUser.username}): X does not allow sending DM to yourself. 別アカウントでお試しください。`);
                                 continue;
                             }
+                            // ポストバン回避: 冒頭バリエーション設定時は循環で組み立て、未設定なら replyContent のみ
+                            const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
                             // DM送信（※要 dm.write 権限・相手が DM 受信可能である必要あり）
-                            const dmResp = await twitterClient.v2.sendDmToParticipant(targetUser.userId, { text: replyContent });
+                            const dmResp = await twitterClient.v2.sendDmToParticipant(targetUser.userId, { text: replyText });
                             await logXApiUsage({ userId: campaign.userId, operation: "x-send-dm", rateLimit: pickRateLimit(dmResp) });
                         } else if (campaign.replyType === "MENTION") {
                             // 対象ツリーから独立した新規メンションとして送信（username 必須）
@@ -235,11 +269,13 @@ export async function GET(req: Request) {
                                 runLogs.push(`Skip MENTION for ${targetUser.userId}: username unresolved`);
                                 continue;
                             }
-                            const tweetResp = await twitterClient.v2.tweet(`@${targetUser.username} ${replyContent}`);
+                            const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
+                            const tweetResp = await twitterClient.v2.tweet(`@${targetUser.username} ${replyText}`);
                             await logXApiUsage({ userId: campaign.userId, operation: "x-tweet-mention", rateLimit: pickRateLimit(tweetResp) });
                         } else {
-                            // 通常リプライ（対象ツリーにぶら下げる）
-                            const replyResp = await twitterClient.v2.reply(replyContent, targetPostId);
+                            // 通常リプライ（対象ツリーにぶら下げる）。冒頭バリエーション設定時は循環で組み立て。
+                            const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
+                            const replyResp = await twitterClient.v2.reply(replyText, targetPostId);
                             await logXApiUsage({ userId: campaign.userId, operation: "x-reply", rateLimit: pickRateLimit(replyResp) });
                         }
 
@@ -251,6 +287,9 @@ export async function GET(req: Request) {
                                 triggerEvent: targetUser.event
                             }
                         });
+
+                        // ポストバン回避: 冒頭バリエーション使用時は循環カウンタを進める（バッチ内ローカル）
+                        if (openingVariants.length > 0) localOpeningsSent++;
 
                         runLogs.push(`✅ Replied to ${targetUser.userId} (@${targetUser.username}) via ${campaign.replyType} (Event: ${targetUser.event})`);
 
@@ -271,7 +310,19 @@ export async function GET(req: Request) {
                 runLogs.push(`  ⏭️  ${skippedCount} 件は既に送信済みのためスキップしました`);
             }
 
-            // このキャンペーンの lastCheckedAt を更新（成功・失敗に関わらず、次回 interval 判定のため）
+            // ポストバン回避: バッチで送信した冒頭バリエーション分を永続カウンタに反映（循環インデックスの基準）
+            if (localOpeningsSent > 0) {
+                try {
+                    await db.autoReplyCampaign.update({
+                        where: { id: campaign.id },
+                        data: { openingsSentCount: { increment: localOpeningsSent } }
+                    });
+                } catch (e) {
+                    console.warn(`Failed to increment openingsSentCount for ${campaign.id}`, e);
+                }
+            }
+
+            // このキャンペーンの lastCheckedAt を更新(成功・失敗に関わらず、次回 interval 判定のため)
             try {
                 await db.autoReplyCampaign.update({
                     where: { id: campaign.id },

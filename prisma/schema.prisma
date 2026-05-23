@@ -319,7 +319,11 @@ model AutoReplyCampaign {
   isTriggerLike  Boolean  @default(false) // いいねをトリガーにするか
   isTriggerReply Boolean  @default(false) // 特定リプをトリガーにするか
   keyword      String?  // isTriggerReplyがtrueの場合の特定キーワード
-  replyContent String   // 自動返信するテキスト内容
+  replyContent String   // 自動返信するテキスト本体（共通CTA。openingVariants 使用時は冒頭の後に連結される）
+  // ポストバン回避用: 冒頭バリエーション（JSON string[]、最大100通り）。
+  // null/空なら従来通り replyContent のみ送信。設定時は AI で量産し、送信ごとに循環選択。
+  openingVariants     String?  // JSON string[]
+  openingsSentCount   Int      @default(0)  // 循環インデックス用カウンタ
   isActive     Boolean  @default(true) // キャンペーンが稼働中かどうか
   replyType    String   @default("REPLY") // 送信方式 ("REPLY", "MENTION", "DM")
   triggerMode  String   @default("OR") // 複数トリガー時の合成ロジック："OR"=いずれか / "AND"=全て満たす
