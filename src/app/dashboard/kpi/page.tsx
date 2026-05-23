@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 interface KpiScenario {
     id: string;
@@ -66,10 +67,15 @@ export default function KpiDashboardPage() {
     const fetchScenarios = useCallback(async () => {
         try {
             const res = await fetch("/api/kpi");
-            const data = await res.json();
-            if (res.ok) setScenarios(data.scenarios || []);
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                toast.error(data?.error || data?.message || "KPIシナリオの取得に失敗しました");
+                return;
+            }
+            setScenarios(data?.scenarios || []);
         } catch (error) {
             console.error("Failed to fetch scenarios", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsLoading(false);
         }
@@ -79,15 +85,19 @@ export default function KpiDashboardPage() {
     const fetchForms = useCallback(async () => {
         try {
             const res = await fetch("/api/funnel/events?days=90");
-            if (res.ok) {
-                const data = await res.json();
-                const forms: string[] = (data.byForm || []).map((b: { formName: string }) => b.formName).filter((n: string) => n && n !== "(未指定)");
-                setAvailableForms(forms);
-                const scenarios: string[] = (data.byScenario || []).map((b: { scenarioName: string }) => b.scenarioName).filter((n: string) => n && n !== "(未指定)");
-                setAvailableScenarios(scenarios);
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "フォーム情報の取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            const forms: string[] = (data.byForm || []).map((b: { formName: string }) => b.formName).filter((n: string) => n && n !== "(未指定)");
+            setAvailableForms(forms);
+            const scenarios: string[] = (data.byScenario || []).map((b: { scenarioName: string }) => b.scenarioName).filter((n: string) => n && n !== "(未指定)");
+            setAvailableScenarios(scenarios);
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     }, []);
 
@@ -134,15 +144,20 @@ export default function KpiDashboardPage() {
                     },
                 }),
             });
-            if (res.ok) {
-                setNewName("");
-                setNewTarget("");
-                setNewMetricSource("manual");
-                setNewPeriod(30);
-                fetchScenarios();
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                toast.error(data?.error || data?.message || "KPI項目の追加に失敗しました");
+                return;
             }
+            toast.success("KPI項目を追加しました");
+            setNewName("");
+            setNewTarget("");
+            setNewMetricSource("manual");
+            setNewPeriod(30);
+            fetchScenarios();
         } catch (error) {
             console.error("Failed to add scenario", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
 
@@ -154,9 +169,16 @@ export default function KpiDashboardPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "delete", payload: { id } }),
             });
-            if (res.ok) fetchScenarios();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "削除に失敗しました");
+                return;
+            }
+            toast.success("削除しました");
+            fetchScenarios();
         } catch (error) {
             console.error("Failed to delete", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
 
@@ -168,9 +190,15 @@ export default function KpiDashboardPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "sync", payload: { id } }),
             });
-            if (res.ok) await fetchScenarios();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "同期に失敗しました");
+                return;
+            }
+            await fetchScenarios();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setSyncingId(null);
         }
@@ -184,9 +212,16 @@ export default function KpiDashboardPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "sync_all" }),
             });
-            if (res.ok) await fetchScenarios();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "全カード同期に失敗しました");
+                return;
+            }
+            toast.success("全カードを同期しました");
+            await fetchScenarios();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setSyncingAll(false);
         }
@@ -194,7 +229,7 @@ export default function KpiDashboardPage() {
 
     const updateManualValue = async (id: string, currentValue: number) => {
         try {
-            await fetch("/api/kpi", {
+            const res = await fetch("/api/kpi", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -202,15 +237,21 @@ export default function KpiDashboardPage() {
                     payload: { id, currentValue },
                 }),
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "値の更新に失敗しました");
+                return;
+            }
             fetchScenarios();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
     const updateMetric = async (id: string, metricSource: string, metricPeriodDays: number | null) => {
         try {
-            await fetch("/api/kpi", {
+            const res = await fetch("/api/kpi", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -218,9 +259,15 @@ export default function KpiDashboardPage() {
                     payload: { id, metricSource, metricPeriodDays },
                 }),
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "メトリクス設定の更新に失敗しました");
+                return;
+            }
             fetchScenarios();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
