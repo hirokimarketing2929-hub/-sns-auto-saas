@@ -61,6 +61,8 @@ export default function ResearchPage() {
 
     // 共通：ユーザー入力テーマ（書き換え時の必須入力）
     const [userTheme, setUserTheme] = useState("");
+    // 任意CTA URL — 入力すると生成本文の末尾に自動付与される（LLMには生成させず後処理で付与）
+    const [ctaUrl, setCtaUrl] = useState("");
 
     // 生成結果カードの編集状態
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -112,6 +114,7 @@ export default function ResearchPage() {
         await executeRepurposeRequest("/api/research/structure-rewrite", {
             sourcePostText: fetchedPost.text,
             userTheme: userTheme.trim(),
+            ctaUrl: ctaUrl.trim(),
         });
     };
 
@@ -129,6 +132,7 @@ export default function ResearchPage() {
         await executeRepurposeRequest("/api/research/structure-rewrite", {
             sourcePostText: sourceText,
             userTheme: userTheme.trim(),
+            ctaUrl: ctaUrl.trim(),
         });
     };
 
@@ -409,6 +413,20 @@ export default function ResearchPage() {
                                         <p className="text-xs text-indigo-700">
                                             元ポストの骨組みに、この1行のテーマと自社ナレッジから抽出した言葉を埋め込みます。できるだけ具体的に入力してください。
                                         </p>
+
+                                        {/* 任意CTA URL — 入力すると生成本文の末尾に自動付与 */}
+                                        <div className="pt-3 mt-3 border-t border-indigo-200">
+                                            <label className="text-xs font-semibold text-indigo-900 mb-1 block">
+                                                🔗 CTA URL（任意）
+                                            </label>
+                                            <Input
+                                                type="url"
+                                                placeholder="https://... 入力すると各生成本文の末尾に自動付与（空欄なら付与なし）"
+                                                value={ctaUrl}
+                                                onChange={(e) => setCtaUrl(e.target.value)}
+                                                className="h-10 bg-white border-indigo-200 text-slate-900 placeholder:text-slate-400 text-sm"
+                                            />
+                                        </div>
                                     </div>
                                 )}
 
@@ -509,6 +527,20 @@ export default function ResearchPage() {
                                     <p className="text-xs text-indigo-700">
                                         元ポストの骨組みに、この1行のテーマと自社ナレッジから抽出した言葉を埋め込みます。できるだけ具体的に入力してください。
                                     </p>
+
+                                    {/* 任意CTA URL — 入力すると生成本文の末尾に自動付与 */}
+                                    <div className="pt-3 mt-3 border-t border-indigo-200">
+                                        <label className="text-xs font-semibold text-indigo-900 mb-1 block">
+                                            🔗 CTA URL（任意）
+                                        </label>
+                                        <Input
+                                            type="url"
+                                            placeholder="https://... 入力すると各生成本文の末尾に自動付与（空欄なら付与なし）"
+                                            value={ctaUrl}
+                                            onChange={(e) => setCtaUrl(e.target.value)}
+                                            className="h-10 bg-white border-indigo-200 text-slate-900 placeholder:text-slate-400 text-sm"
+                                        />
+                                    </div>
                                 </div>
 
                                 <Button

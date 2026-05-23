@@ -466,6 +466,8 @@ export async function POST(req: Request) {
         const data = await req.json();
         const sourcePostText: unknown = data?.sourcePostText;
         const userTheme: unknown = data?.userTheme;
+        // 任意CTA URL: 入力時は各生成本文の末尾にプログラム的に付与する（LLMにはURLを生成させない方針）
+        const ctaUrlInput: string = typeof data?.ctaUrl === "string" ? data.ctaUrl.trim() : "";
         if (typeof sourcePostText !== "string" || !sourcePostText.trim()) {
             return NextResponse.json({ error: "元になる投稿テキストが必要です。" }, { status: 400 });
         }
@@ -599,6 +601,13 @@ export async function POST(req: Request) {
                 return content ? { angle_key: angle.key, angle_label: angle.label, content } : null;
             })
             .filter((x): x is { angle_key: string; angle_label: string; content: string } => x !== null);
+
+        // 任意CTA URLを各生成本文の末尾に付与（stripUrls はこの前段で完了済みなので影響なし）
+        if (ctaUrlInput) {
+            for (const v of variants) {
+                v.content = `${v.content}\n\n${ctaUrlInput}`;
+            }
+        }
 
         if (variants.length === 0) {
             return NextResponse.json({
