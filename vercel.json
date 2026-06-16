@@ -1,24 +1,8 @@
 {
     "crons": [
         {
-            "path": "/api/cron/publish",
-            "schedule": "* * * * *"
-        },
-        {
-            "path": "/api/cron/autoreply",
-            "schedule": "* * * * *"
-        },
-        {
-            "path": "/api/cron/check-impressions",
-            "schedule": "*/15 * * * *"
-        },
-        {
             "path": "/api/cron/fetch-x-analytics",
             "schedule": "0 3 * * *"
-        },
-        {
-            "path": "/api/reply-engagement/check",
-            "schedule": "*/30 * * * *"
         }
     ]
 }
