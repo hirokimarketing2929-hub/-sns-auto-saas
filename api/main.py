@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fastapi import FastAPI, HTTPException, File, UploadFile
 import tempfile
 import base64
