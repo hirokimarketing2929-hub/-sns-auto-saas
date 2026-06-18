@@ -4,6 +4,13 @@ import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     try {
+        // server-to-server エンドポイント: 任意 userId のデータを書き込めるため Bearer 認可必須。
+        // 呼び出し側は Authorization: Bearer <CRON_SECRET> を付与する（cron 系と同じ秘密鍵）。
+        const authHeader = req.headers.get("authorization");
+        if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+        }
+
         const body = await req.json();
         const { userId, type, data } = body;
 

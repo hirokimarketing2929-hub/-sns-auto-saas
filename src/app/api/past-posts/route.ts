@@ -49,8 +49,11 @@ export async function POST(req: Request) {
 
         const xAccountId = await getActiveXAccountId(user.id);
 
-        // 一括でモックデータを登録する処理 (検証用)
+        // 一括でモックデータを登録する処理 (検証用・本番では無効)
         if (data.action === "seed") {
+            if (process.env.NODE_ENV === "production") {
+                return NextResponse.json({ message: "seed は本番環境では無効です" }, { status: 403 });
+            }
             const seedData = [
                 {
                     userId: user.id,
