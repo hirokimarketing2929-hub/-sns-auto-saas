@@ -5,10 +5,10 @@ import {
     ArrowRight, Check, X, ShieldCheck, Sparkles, MessageCircle,
     Zap, Clock, Users, BarChart3, Tag, Bot, Target, Star,
 } from "lucide-react";
-import { PROLINE_URL } from "@/lib/proline";
+import { PROLINE_DIRECT_URL } from "@/lib/proline";
 
-// アフィリエイトリンク（NEXT_PUBLIC_PROLINE_URL）。未設定時は通常登録URLにフォールバック。
-const PROLINE_REGISTER_URL = PROLINE_URL;
+// 最終CTAは /direct（LINE友だち追加に直行）に向けて成約までの摩擦を最小化する。
+const PROLINE_REGISTER_URL = PROLINE_DIRECT_URL;
 
 /**
  * /dashboard/proline ランディングページ。

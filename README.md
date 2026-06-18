@@ -50,7 +50,8 @@ uvicorn main:app --reload --port 8000
 ## 環境変数
 すべて `.env.example` に記載。必須: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
 `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `AI_ENGINE_URL`。
-マネタイズ用: `NEXT_PUBLIC_PROLINE_URL`（ProLineアフィリエイトリンク。未設定時は通常URLにフォールバック）。
+マネタイズ用(任意): `NEXT_PUBLIC_PROLINE_URL` / `NEXT_PUBLIC_PROLINE_DIRECT_URL`。
+オーナーのProLineアフィリリンク(`https://q169hcpg.proline.blog`)はコードに焼き込み済みのため通常は設定不要。別リンクに差し替える場合のみ指定する。
 
 ---
 
@@ -95,4 +96,4 @@ DATABASE_URL="<本番>" node scripts-migrate-x-account-persona.mjs
 
 ### D. デプロイ後スモーク
 - ログイン（メール / X OAuth）/ 投稿生成 / スケジュール作成 / 設定保存 が動くこと。
-- `/dashboard/proline` のCTAが `NEXT_PUBLIC_PROLINE_URL`（アフィリリンク）を指していること。
+- `/dashboard/proline` の最終CTAがアフィリリンクの `/direct`（LINE友だち追加に直行）を指していること。
