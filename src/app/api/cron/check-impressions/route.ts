@@ -67,10 +67,13 @@ export async function GET(req: Request) {
             // このユーザーの監視対象ツイートIDの一覧
             const tweetIds = userPosts.map(p => p.postedTweetId);
 
-            // 複数ツイートの場合、API Limitを考慮してチャンク分けなどの検討が必要ですが、ここでは100件未満の想定
+            // X API v2 の tweets は一度に最大100件。100件超でも取りこぼさないようチャンク分割する。
             try {
+                const CHUNK_SIZE = 100;
+                for (let ci = 0; ci < tweetIds.length; ci += CHUNK_SIZE) {
+                const idChunk = tweetIds.slice(ci, ci + CHUNK_SIZE);
                 // public_metrics (インプレッション数等) を取得する
-                const tweetsData = await client.v2.tweets(tweetIds, {
+                const tweetsData = await client.v2.tweets(idChunk, {
                     "tweet.fields": ["public_metrics"]
                 });
 
@@ -142,6 +145,7 @@ export async function GET(req: Request) {
                         }
                     }
                 }
+                } // end chunk loop
             } catch (apiError: any) {
                 console.error(`X API Error for user ${userId}:`, apiError);
                 runLogs.push(`Error fetching tweets API for user ${userId}: ${apiError.message}`);

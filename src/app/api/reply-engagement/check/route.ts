@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { sendChatworkMessage } from "@/lib/chatwork";
 import { logXApiUsage, logLlmUsage } from "@/lib/api-usage";
-import { getActiveXAccount } from "@/lib/active-x-account";
 
 // リプ回り半自動化：
 //   1. アクティブなターゲットアカウントの最新ポストを X API で取得
@@ -156,26 +155,22 @@ async function resolveProvider(userId: string): Promise<Provider | null> {
     return null;
 }
 
-// 1ユーザー分の実行
-// TODO: cron — 後日 multi-account 対応。cron 経由で呼ばれるとき cookie が無いため、
-//   getActiveXAccountId は User.activeXAccountId を見る。複数 XAccount があるユーザーは
-//   将来的にループに切り替える必要あり。
-async function processUser(userId: string): Promise<{ suggested: number; notified: number; errors: string[] }> {
+// 1 サブアカウント分の実行（cron では全 active サブアカウントを processUser がループする）
+async function processAccount(
+    userId: string,
+    xAccount: {
+        id: string;
+        replyEngagementMinImp: number | null;
+        targetAudience: string | null;
+        accountConcept: string | null;
+        profile: string | null;
+    },
+    chatwork: { apiToken: string; roomId: string },
+): Promise<{ suggested: number; notified: number; errors: string[] }> {
     const errors: string[] = [];
     let suggested = 0;
     let notified = 0;
 
-    const settings = await prisma.settings.findUnique({ where: { userId } });
-    if (!settings?.chatworkApiToken || !settings?.chatworkRoomId) {
-        errors.push("ChatWork 未設定（API token または Room ID）");
-        return { suggested, notified, errors };
-    }
-
-    const xAccount = await getActiveXAccount(userId);
-    if (!xAccount) {
-        errors.push("サブアカウントが未設定です");
-        return { suggested, notified, errors };
-    }
     const xAccountId = xAccount.id;
     const minImp = xAccount.replyEngagementMinImp ?? 500;
 
@@ -189,10 +184,10 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
         return { suggested, notified, errors };
     }
 
-    // X API クライアント
+    // X API クライアント（サブアカウントを明示指定）
     let client;
     try {
-        client = await getTwitterClient(userId);
+        client = await getTwitterClient(userId, xAccountId);
     } catch (e) {
         errors.push(`X API: ${(e as { message?: string })?.message || String(e)}`);
         return { suggested, notified, errors };
@@ -311,7 +306,7 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
                 impressions: target1.impressions,
                 variants,
             });
-            const cwRes = await sendChatworkMessage(settings.chatworkApiToken, settings.chatworkRoomId, message);
+            const cwRes = await sendChatworkMessage(chatwork.apiToken, chatwork.roomId, message);
             if (cwRes.ok) {
                 notified++;
                 await prisma.replyEngagementSuggestion.update({
@@ -336,6 +331,43 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
         }
     }
 
+    return { suggested, notified, errors };
+}
+
+// 1ユーザー分の実行: ChatWork 設定を確認し、全サブアカウントをループ処理する（multi-account 対応）
+async function processUser(userId: string): Promise<{ suggested: number; notified: number; errors: string[] }> {
+    const settings = await prisma.settings.findUnique({ where: { userId } });
+    if (!settings?.chatworkApiToken || !settings?.chatworkRoomId) {
+        return { suggested: 0, notified: 0, errors: ["ChatWork 未設定（API token または Room ID）"] };
+    }
+
+    const xAccounts = await prisma.xAccount.findMany({
+        where: { userId },
+        select: {
+            id: true,
+            replyEngagementMinImp: true,
+            targetAudience: true,
+            accountConcept: true,
+            profile: true,
+        },
+    });
+    if (xAccounts.length === 0) {
+        return { suggested: 0, notified: 0, errors: ["サブアカウントが未設定です"] };
+    }
+
+    let suggested = 0;
+    let notified = 0;
+    const errors: string[] = [];
+    for (const xAccount of xAccounts) {
+        const r = await processAccount(userId, xAccount, {
+            apiToken: settings.chatworkApiToken,
+            roomId: settings.chatworkRoomId,
+        });
+        suggested += r.suggested;
+        notified += r.notified;
+        // どのサブアカウント由来のメッセージか分かるよう接頭辞を付ける
+        for (const e of r.errors) errors.push(`[xacct:${xAccount.id}] ${e}`);
+    }
     return { suggested, notified, errors };
 }
 

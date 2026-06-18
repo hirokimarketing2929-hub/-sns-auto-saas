@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
+import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 
 export async function POST(req: Request) {
     try {
@@ -36,17 +37,16 @@ export async function POST(req: Request) {
             pythonFormData.append("files", file);
         });
 
-        // AIエンジンの /api/parse_knowledge エンドポイントへそのまま転送する
-        const engineUrl = process.env.AI_ENGINE_URL || (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "";
-        const response = await fetch(`${engineUrl}/api/parse_knowledge`, {
+        // AIエンジンの /api/parse_knowledge エンドポイントへそのまま転送する（接続不可・タイムアウトを捕捉）
+        const response = await callEngine("/api/parse_knowledge", {
             method: "POST",
             body: pythonFormData,
         });
 
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error("FastAPI Parse Knowledge Error:", errorText);
-            return NextResponse.json({ message: "AIエンジンの解析に失敗しました" }, { status: response.status });
+            const errorText = await response.text().catch(() => "");
+            console.error("AI engine parse_knowledge error:", response.status, errorText);
+            return NextResponse.json({ message: "AIエンジンの解析に失敗しました" }, { status: 502 });
         }
 
         const data = await response.json();
@@ -85,6 +85,10 @@ export async function POST(req: Request) {
         });
 
     } catch (error) {
+        if (error instanceof EngineUnavailableError) {
+            console.warn("Knowledge upload: AI engine unavailable:", error.message);
+            return NextResponse.json({ message: error.message }, { status: 503 });
+        }
         console.error("Upload Route API Error:", error);
         return NextResponse.json({ message: "サーバー内部エラーが発生しました" }, { status: 500 });
     }

@@ -337,11 +337,6 @@ export async function POST(req: Request) {
             );
             await Promise.all(updatePromises);
             return NextResponse.json({ success: true });
-
-        } else if (action === "sync_gas") {
-            // GASからのデータ同期 (モック機能)
-            // 実際はGAS側からこのエンドポイントを叩く想定
-            return NextResponse.json({ message: "GAS sync functional stub" });
         }
 
         return NextResponse.json({ message: "Invalid action" }, { status: 400 });

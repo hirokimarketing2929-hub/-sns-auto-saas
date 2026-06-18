@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getActiveXAccount } from "@/lib/active-x-account";
+import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 
 export async function POST(req: Request) {
       try {
@@ -31,11 +32,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "サブアカウントが未設定です。" }, { status: 400 });
         }
 
-        // FastAPIへリクエスト
-        const engineUrl = process.env.AI_ENGINE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
+        // AI エンジンへリクエスト。
+        // 障害時は「偽の投稿案を本物として返す」のをやめ、空配列＋警告メッセージで正直に伝える。
         try {
-            const response = await fetch(`${engineUrl}/api/repurpose_post`, {
+            const response = await callEngine("/api/repurpose_post", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -45,30 +45,34 @@ export async function POST(req: Request) {
                     account_concept: xAccount.accountConcept || "",
                     profile: xAccount.profile || ""
                 }),
-                signal: AbortSignal.timeout(30000),
-            });
+            }, { timeoutMs: 30000 });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error("FastAPI Error:", errorText);
-                throw new Error(`AIエンジン応答エラー (${response.status})`);
+                const errorText = await response.text().catch(() => "");
+                console.error("AI engine repurpose error:", response.status, errorText);
+                // 200 で返し、フロントの _fallback 警告UIで「生成できなかった」ことを明示する（偽コンテンツは返さない）
+                return NextResponse.json({
+                    extracted_format: "",
+                    extracted_emotion: "",
+                    generated_posts: [],
+                    _fallback: true,
+                    _message: `AIエンジンの応答エラー (${response.status}) のため横展開を生成できませんでした。しばらくして再度お試しください。`,
+                });
             }
 
             const aiData = await response.json();
             return NextResponse.json(aiData);
         } catch (fetchError: unknown) {
-            // FastAPI接続失敗時のフォールバック
-            console.warn("FastAPI unreachable, returning fallback response:", fetchError);
+            const msg = fetchError instanceof EngineUnavailableError
+                ? fetchError.message
+                : "AIエンジンへの接続に失敗しました。";
+            console.warn("Repurpose: AI engine unavailable:", msg);
             return NextResponse.json({
-                extracted_format: "【オフライン分析】冒頭のフック → 理由の展開 → 行動を促すCTA の三段構成",
-                extracted_emotion: "知的好奇心 × 危機感",
-                generated_posts: [
-                    `${xAccount.targetPain || "集客"}に悩む${xAccount.targetAudience || "あなた"}へ。\n実はこの構造を真似するだけでインプレッションは3倍になります。\n\n具体的には...\n1. 冒頭で常識を否定する\n2. データで裏付ける\n3. 明確なアクションを示す\n\n保存して今日から実践してください。`,
-                    `「まだその方法で消耗してるの？」\n\n${xAccount.targetAudience || "多くの人"}が見落としている事実があります。\nAI×${xAccount.accountConcept || "ビジネス"}の掛け合わせで\n成果が出る人と出ない人の差はたった1つ。\n\nそれは...（続きはプロフへ）`,
-                    `【警告】${xAccount.targetPain || "SNS集客"}で最もやってはいけないこと\n\nそれは「毎日投稿すること」です。\n\nえ？と思った方、正解です。\n大事なのは頻度ではなく"構造"。\n\n${xAccount.profile || "プロ"}が使う具体的な構造を公開します👇`,
-                ],
+                extracted_format: "",
+                extracted_emotion: "",
+                generated_posts: [],
                 _fallback: true,
-                _message: "AIエンジン(FastAPI)に接続できなかったため、テンプレートベースで生成しました。本番環境ではFastAPIサーバーを起動してください。"
+                _message: `${msg} 横展開は生成できませんでした（AIエンジンが起動しているか確認してください）。`,
             });
         }
 

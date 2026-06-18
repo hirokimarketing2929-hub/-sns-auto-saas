@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
+import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -166,6 +167,7 @@ export async function POST(req: Request) {
         const body = await req.json();
         const userTheme: string = typeof body?.user_theme === "string" ? body.user_theme : "";
         const enforce140: boolean = body?.enforce_140_limit === true;
+        const enableResearch: boolean = body?.enable_research === true;
 
         // DB から自社情報を取得
         const [settings, allKnowledges, pastPosts, kpis] = await Promise.all([
@@ -189,7 +191,71 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "設定情報が見つかりません。ナレッジ画面から AI 生成設定を保存してください。" }, { status: 400 });
         }
 
-        // プロバイダ選択
+        const baseRules = allKnowledges.filter(k => k.type === "BASE").map(k => k.content);
+        const templateRules = allKnowledges.filter(k => k.type === "TEMPLATE").map(k => k.content);
+        const winningRules = allKnowledges.filter(k => k.type === "WINNING").map(k => k.content);
+        const losingRules = allKnowledges.filter(k => k.type === "LOSING").map(k => k.content);
+
+        // リサーチモード ON: Python AI エンジンの本物のリサーチ(web_search ツールコール)に配線する。
+        // Next が組んだ全文脈をそのまま渡し、戻りの実 research_log を UI へ返す。
+        // エンジン不達時は偽装せず、下の direct-LLM パスへフォールバックして research_unavailable を明示する。
+        let researchUnavailable = false;
+        if (enableResearch) {
+            try {
+                const persona = xAccount as unknown as {
+                    applyPersonaToGeneration?: boolean;
+                    targetAudience?: string; targetPain?: string; accountConcept?: string;
+                    profile?: string; policy?: string; ctaUrl?: string;
+                };
+                const usePersona = persona.applyPersonaToGeneration === true;
+                const engineRes = await callEngine("/api/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        platform: "X",
+                        target_audience: usePersona ? (persona.targetAudience || "") : "",
+                        target_pain: usePersona ? (persona.targetPain || "") : "",
+                        cta_url: persona.ctaUrl || "",
+                        account_concept: usePersona ? (persona.accountConcept || "") : "",
+                        profile: usePersona ? (persona.profile || "") : "",
+                        policy: usePersona ? (persona.policy || "") : "",
+                        positive_rules: winningRules,
+                        negative_rules: losingRules,
+                        template_rules: templateRules,
+                        enforce_140_limit: enforce140,
+                        past_posts: pastPosts.slice(0, 5).map(p => ({ imp: p.impressions, content: p.content })),
+                        kpi_data: kpis.map(k => ({ name: k.name, current: k.currentValue, target: k.targetValue })),
+                        user_theme: userTheme,
+                        use_realtime_research: true,
+                    }),
+                });
+                if (engineRes.ok) {
+                    const ed = await engineRes.json() as { content?: string; research_log?: string[] };
+                    const engineContent = typeof ed.content === "string" ? stripUrls(ed.content) : "";
+                    if (engineContent.length > 0) {
+                        return NextResponse.json({
+                            content: engineContent,
+                            platform: "X",
+                            research_log: Array.isArray(ed.research_log) ? ed.research_log : [],
+                            _engine: "python-research",
+                        });
+                    }
+                    // 内容が空ならフォールバック
+                    researchUnavailable = true;
+                } else {
+                    researchUnavailable = true;
+                }
+            } catch (e) {
+                if (e instanceof EngineUnavailableError) {
+                    researchUnavailable = true;
+                    console.warn("research engine unavailable, falling back to direct LLM:", e.message);
+                } else {
+                    throw e;
+                }
+            }
+        }
+
+        // プロバイダ選択（direct-LLM パス。research OFF、または research フォールバック時）
         let provider: Provider | null = null;
         if (settings.anthropicApiKey?.trim()) {
             provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
@@ -203,11 +269,6 @@ export async function POST(req: Request) {
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
             }, { status: 400 });
         }
-
-        const baseRules = allKnowledges.filter(k => k.type === "BASE").map(k => k.content);
-        const templateRules = allKnowledges.filter(k => k.type === "TEMPLATE").map(k => k.content);
-        const winningRules = allKnowledges.filter(k => k.type === "WINNING").map(k => k.content);
-        const losingRules = allKnowledges.filter(k => k.type === "LOSING").map(k => k.content);
 
         const systemText = [
             "あなたは X (Twitter) で高エンゲージメントを叩き出すコピーライターです。",
@@ -315,6 +376,8 @@ export async function POST(req: Request) {
             content,
             platform: "X",
             _engine: `${provider.name}:${provider.model}`,
+            // リサーチを要求されたがエンジンに繋がらず通常生成にフォールバックした場合に true。
+            ...(researchUnavailable ? { research_unavailable: true } : {}),
         });
     } catch (error) {
         console.error("generate API Error:", error);
