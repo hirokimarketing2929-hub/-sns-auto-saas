@@ -146,7 +146,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                             arr.map((s: unknown) => typeof s === "string" ? applyUtmToContent(s, ctaUrl, utmParams) : s)
                         );
                     }
-                } catch { /* 不正JSONは触らない */ }
+                } catch (e) { console.warn("threadContents JSON parse skipped (UTM未付与):", e); }
             }
         }
 

@@ -217,6 +217,11 @@ export async function POST(req: Request) {
 
         const { action, payload } = await req.json();
 
+        // payload を必要とする action で payload が無い場合は 500 ではなく 400 を返す
+        if (action !== "sync_all" && (payload === undefined || payload === null)) {
+            return NextResponse.json({ message: "payload is required" }, { status: 400 });
+        }
+
         if (action === "create") {
             // 新規シナリオ追加
             const { name, targetValue, currentValue, metricSource, metricPeriodDays } = payload;

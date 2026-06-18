@@ -5,8 +5,10 @@ import {
     ArrowRight, Check, X, ShieldCheck, Sparkles, MessageCircle,
     Zap, Clock, Users, BarChart3, Tag, Bot, Target, Star,
 } from "lucide-react";
+import { PROLINE_URL } from "@/lib/proline";
 
-const PROLINE_REGISTER_URL = "https://proline.app/";
+// アフィリエイトリンク（NEXT_PUBLIC_PROLINE_URL）。未設定時は通常登録URLにフォールバック。
+const PROLINE_REGISTER_URL = PROLINE_URL;
 
 /**
  * /dashboard/proline ランディングページ。

@@ -36,9 +36,24 @@ scripts-check_*.mjs
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
+
+# local SQLite (未使用: 本番/開発とも DATABASE_URL の PostgreSQL を使用)
+*.db
+/dev.db
+/prisma/dev.db
+
+# python AI engine: virtualenv は requirements.txt から再構築する（コミットしない）
+/api/venv/
+__pycache__/
+*.pyc
+
+# scratch / 手動デバッグ用スクリプト
+/test-*.js
+/test-*.ts
 
 # typescript
 *.tsbuildinfo

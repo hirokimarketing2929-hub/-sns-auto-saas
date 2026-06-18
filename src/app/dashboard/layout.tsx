@@ -176,12 +176,10 @@ export default async function DashboardLayout({
                         </div>
                     </div>
 
-                    {/* ProLine Banner - Modernized */}
+                    {/* ProLine Banner - 社内LP(説得ファネル + アフィリエイトCTA)へ誘導 */}
                     <div className="pt-2 pb-6">
-                        <a
-                            href="https://proline.jp"
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        <Link
+                            href="/dashboard/proline"
                             className="block w-full group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600/80 to-green-700/80 p-4 transition-all hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5"
                         >
                             <div className="relative z-10 flex flex-col space-y-2">
@@ -196,7 +194,7 @@ export default async function DashboardLayout({
                                     詳しく見る <ExternalLink className="size-2.5" />
                                 </span>
                             </div>
-                        </a>
+                        </Link>
                     </div>
                 </nav>
             </aside>
