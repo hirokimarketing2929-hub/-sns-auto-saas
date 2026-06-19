@@ -416,9 +416,26 @@ export default function AutoReplyPage() {
                     <h2 className="text-3xl font-bold tracking-tight mb-2">🤖 自動リプライ（キャンペーン）設定</h2>
                     <p className="text-muted-foreground">
                         特定の投稿に対して「いいね」や「リポスト」をしてくれたユーザーなどを自動検知し、指定した内容を自動でリプライ（返信）します。<br />
-                        ※X APIの利用制限や凍結リスクを避けるため、実際の返信処理には数分〜数十分の遅延（揺らぎ）が設けられます。
+                        ※X APIの利用制限や凍結リスクを避けるため、送信は「チェック間隔」ごとにまとめて行い、1回あたりの送信件数を制限しつつ、各送信の間にランダムな待機（数秒の揺らぎ）を挟みます。上限を超えた分は次回のチェックで順次送信されます。
                     </p>
                 </div>
+            </div>
+
+            {/* ★ X API プラン要件の注意（最重要・目立たせる） */}
+            <div className="rounded-xl border-4 border-amber-500 bg-amber-50 p-5 space-y-2 shadow-md">
+                <p className="text-lg md:text-xl font-extrabold text-amber-900 flex items-center gap-2">
+                    <span className="text-2xl">⚠️</span>
+                    この機能には X API の「Basic」プラン以上が必須です
+                </p>
+                <p className="text-sm md:text-base font-bold text-amber-900 leading-relaxed">
+                    自動リプライは「いいね／リポスト／キーワードリプ」をした人を X API で検出して送信します。
+                    これらの検出には <span className="underline decoration-2">X API の有料プラン（Basic 以上）</span> が必要です。
+                    無料（Free）プランでは検出が行えず、キャンペーンを作成しても返信は送信されません。
+                </p>
+                <ul className="text-xs md:text-sm text-amber-900 space-y-1 list-disc list-inside leading-relaxed">
+                    <li>特に「💬 特定キーワードのリプライ」検出は検索APIを使うため、Basic 以上が必須です。</li>
+                    <li>ご利用前に <a href="https://developer.x.com/en/portal/products" target="_blank" rel="noreferrer" className="underline font-bold">X Developer Portal</a> でプランをご確認ください。</li>
+                </ul>
             </div>
 
             {/* シークレットリプライ（メンション/DM）に関する注意 */}
