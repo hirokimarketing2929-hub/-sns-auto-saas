@@ -217,6 +217,11 @@ export async function POST(req: Request) {
 
         const { action, payload } = await req.json();
 
+        // payload を必要とする action で payload が無い場合は 500 ではなく 400 を返す
+        if (action !== "sync_all" && (payload === undefined || payload === null)) {
+            return NextResponse.json({ message: "payload is required" }, { status: 400 });
+        }
+
         if (action === "create") {
             // 新規シナリオ追加
             const { name, targetValue, currentValue, metricSource, metricPeriodDays } = payload;
@@ -332,11 +337,6 @@ export async function POST(req: Request) {
             );
             await Promise.all(updatePromises);
             return NextResponse.json({ success: true });
-
-        } else if (action === "sync_gas") {
-            // GASからのデータ同期 (モック機能)
-            // 実際はGAS側からこのエンドポイントを叩く想定
-            return NextResponse.json({ message: "GAS sync functional stub" });
         }
 
         return NextResponse.json({ message: "Invalid action" }, { status: 400 });

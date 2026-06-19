@@ -101,24 +101,11 @@ export default function GeneratePreviewPage() {
                 throw new Error("設定データが読み込めませんでした。左の「設定・ペルソナ登録」からまずは設定を保存してください。");
             }
 
-            // リサーチモードがオンの場合、思考ログを表示
+            // リサーチモード ON: サーバ(Python AI エンジン)が本物のリサーチ(web_search)を実行する。
+            // ここでは進行中表示のみ。実際の思考ログはレスポンスの research_log を表示する。
             if (researchEnabled) {
                 setIsResearching(true);
-                addResearchLog("thinking", "生成パラメータを構築中...");
-                await new Promise(r => setTimeout(r, 600));
-                addResearchLog("searching", "Xトレンドをリサーチ中...", "MCP経由でリアルタイムデータを取得");
-                await new Promise(r => setTimeout(r, 1200));
-                addResearchLog("analyzing", "トレンドデータを分析し、最適なテーマを選定中...");
-                await new Promise(r => setTimeout(r, 800));
-            }
-
-            const positiveRules = knowledges.filter(k => k.type === "WINNING").map(k => k.content);
-            const negativeRules = knowledges.filter(k => k.type === "LOSING").map(k => k.content);
-            const templateRules = knowledges.filter(k => k.type === "TEMPLATE").map(k => k.content);
-
-            if (researchEnabled) {
-                addResearchLog("thinking", "ナレッジベースと照合中...", `勝ちパターン: ${positiveRules.length}件, 禁止ルール: ${negativeRules.length}件`);
-                await new Promise(r => setTimeout(r, 500));
+                addResearchLog("searching", "Xの最新トレンドをリサーチ中...", "AIエンジンが web_search を実行します");
             }
 
             const response = await fetch("/api/generate", {
@@ -140,7 +127,17 @@ export default function GeneratePreviewPage() {
             const data = await response.json();
 
             if (researchEnabled) {
-                addResearchLog("complete", "投稿の生成が完了しました");
+                // 仮の進行ログを実際の research_log で置き換える
+                setResearchLogs([]);
+                const realLog: string[] = Array.isArray(data.research_log) ? data.research_log : [];
+                if (data.research_unavailable) {
+                    addResearchLog("complete", "リサーチに接続できなかったため通常生成しました", "AIエンジン(FastAPI)が起動しているか確認してください");
+                } else if (realLog.length > 0) {
+                    realLog.forEach((msg: string) => addResearchLog("searching", msg));
+                    addResearchLog("complete", "リサーチ完了。トレンドを反映して生成しました");
+                } else {
+                    addResearchLog("complete", "投稿の生成が完了しました");
+                }
                 setIsResearching(false);
             }
 

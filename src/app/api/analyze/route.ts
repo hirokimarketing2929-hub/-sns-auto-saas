@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
+import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -32,8 +33,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "分析するデータがありません" }, { status: 400 });
         }
 
-        // FastAPIサーバーへ分析リクエスト
-        const aiResponse = await fetch((process.env.AI_ENGINE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000") + "/api/analyze_knowledge", {
+        // AI エンジンへ分析リクエスト（接続不可・タイムアウトは EngineUnavailableError で捕捉）
+        const aiResponse = await callEngine("/api/analyze_knowledge", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -45,7 +46,10 @@ export async function POST(req: Request) {
         });
 
         if (!aiResponse.ok) {
-            throw new Error(`AIサーバーからの応答エラー: ${aiResponse.status}`);
+            return NextResponse.json(
+                { message: `AIエンジンの解析に失敗しました（${aiResponse.status}）。しばらくして再度お試しください。` },
+                { status: 502 }
+            );
         }
 
         const aiData = await aiResponse.json();
@@ -70,6 +74,10 @@ export async function POST(req: Request) {
         });
 
     } catch (error: any) {
+        if (error instanceof EngineUnavailableError) {
+            console.warn("Analyze: AI engine unavailable:", error.message);
+            return NextResponse.json({ message: error.message }, { status: 503 });
+        }
         console.error("Analyze POST error:", error);
         return NextResponse.json({ message: error.message || "サーバーエラー" }, { status: 500 });
     }

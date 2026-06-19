@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getTwitterClient } from "@/lib/twitter";
 import { getActiveXAccount } from "@/lib/active-x-account";
+import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 
 // 指定 @username の公開ポストを X API 経由で取得し、エンゲージメント最大のものを
 // 既存の repurpose エンジンに投げて「型と感情」を抽出 → 自社テーマに置き換えた
@@ -101,10 +102,14 @@ export async function POST(req: Request) {
             (b.likes + b.retweets * 2) - (a.likes + a.retweets * 2)
         )[0];
 
-        // 既存の repurpose エンジンに投入
-        const engineUrl = process.env.AI_ENGINE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        // 既存の repurpose エンジンに投入（接続不可・タイムアウトは EngineUnavailableError で捕捉）
+        const sourceMeta = {
+            _source_username: `@${normalized}`,
+            _source_display_name: displayName,
+            _source_metrics: { likes: best.likes, retweets: best.retweets, impressions: best.impressions },
+        };
         try {
-            const response = await fetch(`${engineUrl}/api/repurpose_post`, {
+            const response = await callEngine("/api/repurpose_post", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -114,36 +119,28 @@ export async function POST(req: Request) {
                     account_concept: xAccount.accountConcept || "",
                     profile: xAccount.profile || ""
                 }),
-                signal: AbortSignal.timeout(30000),
-            });
+            }, { timeoutMs: 30000 });
 
             if (!response.ok) {
-                throw new Error(`AIエンジン応答エラー (${response.status})`);
+                const errorText = await response.text().catch(() => "");
+                console.error("AI engine repurpose(account) error:", response.status, errorText);
+                // 偽コンテンツは返さず、空＋警告メッセージで正直に伝える
+                return NextResponse.json({
+                    extracted_format: "", extracted_emotion: "", generated_posts: [],
+                    _fallback: true, ...sourceMeta,
+                    _message: `AIエンジンの応答エラー (${response.status}) のため横展開を生成できませんでした。`,
+                });
             }
 
             const aiData = await response.json();
-            return NextResponse.json({
-                ...aiData,
-                _source_username: `@${normalized}`,
-                _source_display_name: displayName,
-                _source_metrics: { likes: best.likes, retweets: best.retweets, impressions: best.impressions },
-            });
+            return NextResponse.json({ ...aiData, ...sourceMeta });
         } catch (fetchError: unknown) {
-            // FastAPI接続失敗時のフォールバック（テンプレート生成）
-            console.warn("FastAPI unreachable, returning fallback:", fetchError);
+            const msg = fetchError instanceof EngineUnavailableError ? fetchError.message : "AIエンジンへの接続に失敗しました。";
+            console.warn("Research account: AI engine unavailable:", msg);
             return NextResponse.json({
-                extracted_format: "【オフライン分析】冒頭フック → 理由の展開 → 行動を促すCTA の三段構成",
-                extracted_emotion: "知的好奇心 × 危機感",
-                generated_posts: [
-                    `${xAccount.targetPain || "集客"}に悩む${xAccount.targetAudience || "あなた"}へ。\n実はこの構造を真似するだけでインプレッションは3倍になります。\n\n具体的には...\n1. 冒頭で常識を否定する\n2. データで裏付ける\n3. 明確なアクションを示す\n\n保存して今日から実践してください。`,
-                    `「まだその方法で消耗してるの？」\n\n${xAccount.targetAudience || "多くの人"}が見落としている事実があります。\n${xAccount.accountConcept || "ビジネス"}の掛け合わせで成果が出る人と出ない人の差はたった1つ。\n\nそれは...（続きはプロフへ）`,
-                    `【警告】${xAccount.targetPain || "SNS集客"}で最もやってはいけないこと\n\nそれは「毎日投稿すること」です。\n\nえ？と思った方、正解です。\n大事なのは頻度ではなく"構造"。\n\n${xAccount.profile || "プロ"}が使う具体的な構造を公開します👇`,
-                ],
-                _fallback: true,
-                _source_username: `@${normalized}`,
-                _source_display_name: displayName,
-                _source_metrics: { likes: best.likes, retweets: best.retweets, impressions: best.impressions },
-                _message: "AIエンジン(FastAPI)に接続できなかったため、テンプレートベースで生成しました。"
+                extracted_format: "", extracted_emotion: "", generated_posts: [],
+                _fallback: true, ...sourceMeta,
+                _message: `${msg} 横展開は生成できませんでした（AIエンジンが起動しているか確認してください）。`,
             });
         }
     } catch (error) {
