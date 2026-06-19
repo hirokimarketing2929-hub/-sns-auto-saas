@@ -8,6 +8,54 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useRouter } from "next/navigation";
 import XAccountManager from "@/components/XAccountManager";
 
+/**
+ * 認証情報フィールド（APIキー等）の共通入力欄。
+ * locked=true のときは読み取り専用で内容をそのまま表示し、「編集」を押すまで入力できない。
+ */
+function CredentialField({
+    name, label, value, locked, onChange, onUnlock, placeholder, help, labelExtra,
+}: {
+    name: string;
+    label: string;
+    value: string;
+    locked: boolean;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onUnlock: () => void;
+    placeholder?: string;
+    help?: React.ReactNode;
+    labelExtra?: React.ReactNode;
+}) {
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <Label htmlFor={name} className="flex items-center gap-2">{label}{labelExtra}</Label>
+                {locked && (
+                    <button
+                        type="button"
+                        onClick={onUnlock}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+                    >
+                        ✏️ 編集
+                    </button>
+                )}
+            </div>
+            <Input
+                id={name}
+                name={name}
+                type="text"
+                readOnly={locked}
+                autoComplete="off"
+                placeholder={placeholder}
+                value={value}
+                onChange={onChange}
+                className={locked ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white"}
+            />
+            {locked && <p className="text-[11px] text-slate-400">設定済み（変更するには「編集」を押してください）</p>}
+            {help}
+        </div>
+    );
+}
+
 export default function SettingsPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -29,6 +77,9 @@ export default function SettingsPage() {
         replyEngagementMinImp: "500",
     });
     const [cwTestState, setCwTestState] = useState<{ loading: boolean; text: string; type: "success" | "error" | "" }>({ loading: false, text: "", type: "" });
+    // 認証情報フィールドの編集ロック解除状態（保存済みの値は既定でロックし「編集」で解除）
+    const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
+    const unlock = (k: string) => setUnlocked(prev => ({ ...prev, [k]: true }));
 
     // プロラインフリー連携 webhook token
     const [funnelToken, setFunnelToken] = useState<string>("");
@@ -208,6 +259,7 @@ export default function SettingsPage() {
                     xProfileImageUrl: updatedSettings.xProfileImageUrl || ""
                 }));
                 setMessage({ text: "設定を保存しました。アカウント名とアイコンが反映されました。", type: "success" });
+                setUnlocked({}); // 保存後は再びロック状態に戻す
                 router.refresh(); // サイドバーなどのサーバーコンポーネントを再取得して表示を更新
             } else {
                 setMessage({ text: "保存に失敗しました。", type: "error" });
@@ -302,40 +354,28 @@ export default function SettingsPage() {
                                     </p>
 
                                     <div className="space-y-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="anthropicApiKey" className="flex items-center gap-2">
-                                                Anthropic Claude API Key
-                                                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 border border-indigo-300 rounded-full px-2 py-0.5">推奨</span>
-                                            </Label>
-                                            <Input
-                                                id="anthropicApiKey"
-                                                name="anthropicApiKey"
-                                                type="password"
-                                                placeholder="sk-ant-api03-..."
-                                                value={formData.anthropicApiKey}
-                                                onChange={handleChange}
-                                                className="bg-white"
-                                            />
-                                            <p className="text-xs text-gray-600">
-                                                取得先: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">console.anthropic.com → API Keys</a> （Claude Sonnet 4.6 を使用）
-                                            </p>
-                                        </div>
+                                        <CredentialField
+                                            name="anthropicApiKey"
+                                            label="Anthropic Claude API Key"
+                                            labelExtra={<span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 border border-indigo-300 rounded-full px-2 py-0.5">推奨</span>}
+                                            placeholder="sk-ant-api03-..."
+                                            value={formData.anthropicApiKey}
+                                            onChange={handleChange}
+                                            locked={!!formData.anthropicApiKey && !unlocked.anthropicApiKey}
+                                            onUnlock={() => unlock("anthropicApiKey")}
+                                            help={<p className="text-xs text-gray-600">取得先: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">console.anthropic.com → API Keys</a> （Claude Sonnet 4.6 を使用）</p>}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <Label htmlFor="openaiApiKey">OpenAI API Key</Label>
-                                            <Input
-                                                id="openaiApiKey"
-                                                name="openaiApiKey"
-                                                type="password"
-                                                placeholder="sk-proj-..."
-                                                value={formData.openaiApiKey}
-                                                onChange={handleChange}
-                                                className="bg-white"
-                                            />
-                                            <p className="text-xs text-gray-600">
-                                                取得先: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">platform.openai.com → API keys</a> （GPT-4o を使用）
-                                            </p>
-                                        </div>
+                                        <CredentialField
+                                            name="openaiApiKey"
+                                            label="OpenAI API Key"
+                                            placeholder="sk-proj-..."
+                                            value={formData.openaiApiKey}
+                                            onChange={handleChange}
+                                            locked={!!formData.openaiApiKey && !unlocked.openaiApiKey}
+                                            onUnlock={() => unlock("openaiApiKey")}
+                                            help={<p className="text-xs text-gray-600">取得先: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">platform.openai.com → API keys</a> （GPT-4o を使用）</p>}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -354,46 +394,38 @@ export default function SettingsPage() {
                                     </p>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="xApiKey">API Key</Label>
-                                            <Input
-                                                id="xApiKey"
-                                                name="xApiKey"
-                                                type="password"
-                                                value={formData.xApiKey}
-                                                onChange={handleChange}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="xApiSecret">API Secret</Label>
-                                            <Input
-                                                id="xApiSecret"
-                                                name="xApiSecret"
-                                                type="password"
-                                                value={formData.xApiSecret}
-                                                onChange={handleChange}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="xAccessToken">Access Token</Label>
-                                            <Input
-                                                id="xAccessToken"
-                                                name="xAccessToken"
-                                                type="password"
-                                                value={formData.xAccessToken}
-                                                onChange={handleChange}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="xAccessSecret">Access Token Secret</Label>
-                                            <Input
-                                                id="xAccessSecret"
-                                                name="xAccessSecret"
-                                                type="password"
-                                                value={formData.xAccessSecret}
-                                                onChange={handleChange}
-                                            />
-                                        </div>
+                                        <CredentialField
+                                            name="xApiKey"
+                                            label="API Key"
+                                            value={formData.xApiKey}
+                                            onChange={handleChange}
+                                            locked={!!formData.xApiKey && !unlocked.xApiKey}
+                                            onUnlock={() => unlock("xApiKey")}
+                                        />
+                                        <CredentialField
+                                            name="xApiSecret"
+                                            label="API Secret"
+                                            value={formData.xApiSecret}
+                                            onChange={handleChange}
+                                            locked={!!formData.xApiSecret && !unlocked.xApiSecret}
+                                            onUnlock={() => unlock("xApiSecret")}
+                                        />
+                                        <CredentialField
+                                            name="xAccessToken"
+                                            label="Access Token"
+                                            value={formData.xAccessToken}
+                                            onChange={handleChange}
+                                            locked={!!formData.xAccessToken && !unlocked.xAccessToken}
+                                            onUnlock={() => unlock("xAccessToken")}
+                                        />
+                                        <CredentialField
+                                            name="xAccessSecret"
+                                            label="Access Token Secret"
+                                            value={formData.xAccessSecret}
+                                            onChange={handleChange}
+                                            locked={!!formData.xAccessSecret && !unlocked.xAccessSecret}
+                                            onUnlock={() => unlock("xAccessSecret")}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -510,20 +542,16 @@ export default function SettingsPage() {
                                     ターゲットアカウントの高インプ投稿が見つかった際に、該当 URL とコピペ用リプライ案 3 本を ChatWork のルームへ自動送信します。
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="chatworkApiToken">ChatWork API トークン</Label>
-                                        <Input
-                                            id="chatworkApiToken"
-                                            name="chatworkApiToken"
-                                            type="password"
-                                            placeholder="ChatWork 設定 → API から取得"
-                                            value={formData.chatworkApiToken}
-                                            onChange={handleChange}
-                                        />
-                                        <p className="text-[11px] text-muted-foreground">
-                                            取得先: <a href="https://www.chatwork.com/service/packages/chatwork/subpackages/api/token.php" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">chatwork.com → API 設定</a>
-                                        </p>
-                                    </div>
+                                    <CredentialField
+                                        name="chatworkApiToken"
+                                        label="ChatWork API トークン"
+                                        placeholder="ChatWork 設定 → API から取得"
+                                        value={formData.chatworkApiToken}
+                                        onChange={handleChange}
+                                        locked={!!formData.chatworkApiToken && !unlocked.chatworkApiToken}
+                                        onUnlock={() => unlock("chatworkApiToken")}
+                                        help={<p className="text-[11px] text-muted-foreground">取得先: <a href="https://www.chatwork.com/service/packages/chatwork/subpackages/api/token.php" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">chatwork.com → API 設定</a></p>}
+                                    />
                                     <div className="space-y-2">
                                         <Label htmlFor="chatworkRoomId">送信先ルーム ID</Label>
                                         <Input
