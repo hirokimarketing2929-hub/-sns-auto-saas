@@ -4,6 +4,23 @@ import { getTwitterClient } from "@/lib/twitter";
 import { TwitterApi } from "twitter-api-v2";
 import { logXApiUsage } from "@/lib/api-usage";
 
+// 送信ループは対象ユーザーごとにジッター待機を挟むため、関数の最大実行時間を引き上げる。
+// （Vercel の既定タイムアウトだとバッチが途中で打ち切られ、取りこぼしが発生し得る）
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
+// 1 回の cron 実行・1 キャンペーンあたりの最大送信件数。
+// 短時間の大量送信によるスパム判定/凍結を避けるためのキャップ。
+// 上限に達した残りは次回 cron 実行で順次処理される（AutoReplyLog で再送防止）。
+const MAX_SENDS_PER_CAMPAIGN_PER_RUN = 15;
+
+// ポストバン回避用のランダムジッター（ミリ秒）。固定間隔の機械的送信を避ける。
+const JITTER_MIN_MS = 2000;
+const JITTER_MAX_MS = 8000;
+function randomJitterMs(): number {
+    return JITTER_MIN_MS + Math.floor(Math.random() * (JITTER_MAX_MS - JITTER_MIN_MS + 1));
+}
+
 /**
  * ポストバン回避用: 冒頭バリエーション（最大100通り）を JSON 配列から安全にパース。
  * 不正JSON・空文字・非string要素はフィルタする。
@@ -107,16 +124,16 @@ export async function GET(req: Request) {
                 continue;
             }
 
-            // DM キャンペーンの場合、送信者自身の X user_id を取得しておく
-            //   → 対象ユーザー == 自分 の場合、自己DM を事前に弾く（X API では不可で 403 になる）
+            // 送信者自身の X user_id を取得しておく（全 replyType 共通）。
+            //   → 対象ユーザー == 自分 の場合、自己宛の送信を事前に弾く。
+            //   DM は X API 上 自己DM が 403 になり、REPLY/MENTION も自分の投稿に
+            //   自分でいいね/RT したケースで自分宛の公開リプライが飛ぶのを防ぐ。
             let selfUserId: string | null = null;
-            if (campaign.replyType === "DM") {
-                try {
-                    const me = await twitterClient.v2.me();
-                    selfUserId = me.data?.id || null;
-                } catch (meErr: any) {
-                    runLogs.push(`Could not fetch sender identity (v2.me) for campaign ${campaign.name}: ${meErr.message || meErr}`);
-                }
+            try {
+                const me = await twitterClient.v2.me();
+                selfUserId = me.data?.id || null;
+            } catch (meErr: any) {
+                runLogs.push(`Could not fetch sender identity (v2.me) for campaign ${campaign.name}: ${meErr.message || meErr}`);
             }
 
             // 各トリガーに該当したユーザー集合を個別に収集
@@ -233,8 +250,15 @@ export async function GET(req: Request) {
 
             runLogs.push(`Campaign "${campaign.name}" — ${dedupedUsers.length} candidate(s) after dedup`);
             let skippedCount = 0;
+            let sentThisRun = 0;
 
             for (const targetUser of dedupedUsers) {
+                // 1 実行あたりの送信上限に達したら打ち切り（残りは次回 cron で処理）
+                if (sentThisRun >= MAX_SENDS_PER_CAMPAIGN_PER_RUN) {
+                    runLogs.push(`⏸️ Campaign "${campaign.name}": reached per-run cap (${MAX_SENDS_PER_CAMPAIGN_PER_RUN}). Remaining will be processed on the next cron run.`);
+                    break;
+                }
+
                 const existingLog = await db.autoReplyLog.findUnique({
                     where: {
                         campaignId_targetUserId: {
@@ -249,15 +273,17 @@ export async function GET(req: Request) {
                     continue;
                 }
 
+                // 自己宛をガード（全 replyType 共通）。自分の投稿に自分でいいね/RT した場合や
+                // 自己DM（X API では 403）を弾く。
+                if (selfUserId && targetUser.userId === selfUserId) {
+                    runLogs.push(`⏭️ Skip self-target for ${targetUser.userId} (@${targetUser.username}): 自分自身宛の送信はスキップしました。`);
+                    continue;
+                }
+
                 {
                     try {
                         // 送信方式に応じて投稿方法を分岐
                         if (campaign.replyType === "DM") {
-                            // 自己DM を事前にガード（X API は自分から自分への DM 送信を禁止）
-                            if (selfUserId && targetUser.userId === selfUserId) {
-                                runLogs.push(`⏭️ Skip self-DM for ${targetUser.userId} (@${targetUser.username}): X does not allow sending DM to yourself. 別アカウントでお試しください。`);
-                                continue;
-                            }
                             // ポストバン回避: 冒頭バリエーション設定時は循環で組み立て、未設定なら replyContent のみ
                             const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
                             // DM送信（※要 dm.write 権限・相手が DM 受信可能である必要あり）
@@ -290,11 +316,13 @@ export async function GET(req: Request) {
 
                         // ポストバン回避: 冒頭バリエーション使用時は循環カウンタを進める（バッチ内ローカル）
                         if (openingVariants.length > 0) localOpeningsSent++;
+                        sentThisRun++;
 
                         runLogs.push(`✅ Replied to ${targetUser.userId} (@${targetUser.username}) via ${campaign.replyType} (Event: ${targetUser.event})`);
 
-                        // APIのRate Limit・凍結対策のため、1回の送信ごとに2秒待機する
-                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        // APIのRate Limit・凍結対策のため、送信ごとにランダムなジッター待機を挟む
+                        // （固定間隔の機械的送信を避け、スパム検知リスクを下げる）
+                        await new Promise(resolve => setTimeout(resolve, randomJitterMs()));
 
                     } catch (replyError: unknown) {
                         const err = replyError as { message?: string; data?: { detail?: string; title?: string } };
