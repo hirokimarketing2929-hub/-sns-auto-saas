@@ -72,6 +72,15 @@ export default function AccountSettingsPage() {
     // 記入済みフィールドの編集ロック解除状態
     const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
     const unlock = (k: string) => setUnlocked(prev => ({ ...prev, [k]: true }));
+    // 全ての認証情報フィールドをまとめて編集可能にする（上部「編集」ボタン用）
+    const ALL_CRED_KEYS = ["anthropicApiKey", "openaiApiKey", "chatworkApiToken", "chatworkRoomId", "xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"];
+    const unlockAll = () => setUnlocked(Object.fromEntries(ALL_CRED_KEYS.map(k => [k, true])));
+    const anyLocked = ALL_CRED_KEYS.some(k => {
+        const v = (["anthropicApiKey", "openaiApiKey", "chatworkApiToken", "chatworkRoomId"].includes(k)
+            ? (common as Record<string, string>)[k]
+            : (keys as Record<string, string>)[k]);
+        return !!v && !unlocked[k];
+    });
 
     useEffect(() => {
         if (!id) return;
@@ -240,6 +249,23 @@ export default function AccountSettingsPage() {
                         <p className="text-sm text-slate-500">{acc?.xUsername || "未連携"}</p>
                     </div>
                 </div>
+            </div>
+
+            {/* 上部の操作バー（スクロールしても追従） */}
+            <div className="sticky top-0 z-20 flex items-center justify-end gap-2 py-3 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={unlockAll}
+                    disabled={!anyLocked}
+                    className="border-slate-300 text-slate-700"
+                    title="設定済みの全てのキーを編集できるようにします"
+                >
+                    ✏️ 編集
+                </Button>
+                <Button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 保存中...</> : <><Save className="w-4 h-4 mr-2" /> 保存する</>}
+                </Button>
             </div>
 
             {notice && (
