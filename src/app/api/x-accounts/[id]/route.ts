@@ -43,7 +43,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const xa = await prisma.xAccount.findFirst({ where: { id, userId: user.id } });
     if (!xa) return NextResponse.json({ message: "Not Found" }, { status: 404 });
-    return NextResponse.json({ xAccount: mask(xa) });
+    // アカウント詳細ページで保存済みキーを表示するため、本人にのみ平文で返す
+    return NextResponse.json({
+        xAccount: {
+            ...mask(xa),
+            xApiKey: xa.xApiKey ?? "",
+            xApiSecret: xa.xApiSecret ?? "",
+            xAccessToken: xa.xAccessToken ?? "",
+            xAccessSecret: xa.xAccessSecret ?? "",
+        },
+    });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
