@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import LogoutButton from "./LogoutButton";
 import AccountSwitcher from "@/components/AccountSwitcher";
+import OnboardingPopup from "@/components/OnboardingPopup";
 import Link from "next/link";
 import {
     LayoutDashboard,
@@ -17,6 +18,8 @@ import {
     ImageIcon,
     Zap,
     ExternalLink,
+    HelpCircle,
+    Mail,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -61,6 +64,8 @@ export default async function DashboardLayout({
 
     return (
         <div className="min-h-screen flex bg-background">
+            {/* 初回ログイン時の LINE 登録誘導ポップアップ（端末ごとに1回） */}
+            <OnboardingPopup />
             {/* Sidebar（暗めに固定） */}
             <aside className="w-64 fixed inset-y-0 left-0 z-50 flex flex-col border-r border-white/[0.06] bg-neutral-950">
                 {/* Logo */}
@@ -172,6 +177,14 @@ export default async function DashboardLayout({
                             <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <ImageIcon className="size-4" />
                                 <span>メディアライブラリ</span>
+                            </Link>
+                            <Link href="/dashboard/help" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                <HelpCircle className="size-4" />
+                                <span>Q&A・使い方</span>
+                            </Link>
+                            <Link href="/dashboard/contact" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                <Mail className="size-4" />
+                                <span>お問い合わせ</span>
                             </Link>
                         </div>
                     </div>

@@ -89,6 +89,13 @@ export async function GET(req: Request) {
     const totalConversions = pastPosts.reduce((s, p) => s + (p.conversions || 0), 0);
     const totalReplies = pastPosts.reduce((s, p) => s + ((p as { replies?: number }).replies || 0), 0);
     const totalUrlClicks = pastPosts.reduce((s, p) => s + ((p as { urlClicks?: number }).urlClicks || 0), 0);
+    const totalLikes = pastPosts.reduce((s, p) => s + ((p as { likes?: number }).likes || 0), 0);
+    const totalRetweets = pastPosts.reduce((s, p) => s + ((p as { retweets?: number }).retweets || 0), 0);
+    const totalQuotes = pastPosts.reduce((s, p) => s + ((p as { quotes?: number }).quotes || 0), 0);
+    const totalProfileClicks = pastPosts.reduce((s, p) => s + ((p as { profileClicks?: number }).profileClicks || 0), 0);
+    // エンゲージメント率 = (いいね+RT+リプ+引用) / インプレッション
+    const totalEngagements = totalLikes + totalRetweets + totalReplies + totalQuotes;
+    const engagementRate = totalImpressions > 0 ? Math.round((totalEngagements / totalImpressions) * 1000) / 10 : 0;
     const avgImpressions = pastPosts.length > 0 ? Math.round(totalImpressions / pastPosts.length) : 0;
     const topPosts = [...pastPosts].sort((a, b) => (b.impressions || 0) - (a.impressions || 0)).slice(0, 5);
 
@@ -172,6 +179,12 @@ export async function GET(req: Request) {
             totalConversions,
             totalReplies,
             totalUrlClicks,
+            totalLikes,
+            totalRetweets,
+            totalQuotes,
+            totalProfileClicks,
+            totalEngagements,
+            engagementRate,
             avgImpressions,
             top: topPosts.map(p => {
                 const ex = p as unknown as { replies?: number; urlClicks?: number; likes?: number; retweets?: number };

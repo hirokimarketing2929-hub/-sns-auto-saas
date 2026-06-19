@@ -49,6 +49,7 @@ export default function SchedulePage() {
         impressionReplyContent: ""
     });
     const [savingEdit, setSavingEdit] = useState(false);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
     useEffect(() => {
         fetchPosts();
@@ -100,6 +101,25 @@ export default function SchedulePage() {
             alert("エラーが発生しました。");
         } finally {
             setPublishing(null);
+        }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("この下書き／予約を削除します。よろしいですか？\n（X に投稿済みのものは対象外です）")) return;
+        setDeleting(id);
+        try {
+            const res = await fetch(`/api/posts/${id}`, { method: "DELETE" });
+            if (res.ok) {
+                fetchPosts();
+            } else {
+                const result = await res.json().catch(() => ({}));
+                alert(`❌ 削除に失敗しました: ${result.message || res.status}`);
+            }
+        } catch (error) {
+            console.error("Delete error:", error);
+            alert("エラーが発生しました。");
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -586,6 +606,14 @@ export default function SchedulePage() {
                                                     onClick={() => handlePublishNow(post.id)}
                                                 >
                                                     {publishing === post.id ? "投稿中..." : "𝕏 今すぐポストする"}
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                                    disabled={deleting === post.id || publishing === post.id || editingId !== null}
+                                                    onClick={() => handleDelete(post.id)}
+                                                >
+                                                    {deleting === post.id ? "削除中..." : "🗑 削除"}
                                                 </Button>
                                             </>
                                         )
