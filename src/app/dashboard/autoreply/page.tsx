@@ -422,19 +422,19 @@ export default function AutoReplyPage() {
             </div>
 
             {/* シークレットリプライ（メンション/DM）に関する注意 */}
-            <div className="rounded-lg border-2 border-red-500/70 bg-red-600/25 p-4 space-y-2">
-                <p className="text-sm font-bold text-red-100">⚠️ シークレットリプライ機能のご利用にあたって</p>
-                <ul className="text-xs text-red-50/95 space-y-1 list-disc list-inside leading-relaxed">
+            <div className="rounded-lg border-2 border-red-400 bg-red-100 p-4 space-y-2">
+                <p className="text-sm font-bold text-red-900">⚠️ シークレットリプライ機能のご利用にあたって</p>
+                <ul className="text-xs text-neutral-900 space-y-1 list-disc list-inside leading-relaxed">
                     <li>
-                        <span className="font-bold text-white">シークレットリプライ機能はシャドウバンのリスクがあるため、使用は自己責任でお願いします。</span>
+                        <span className="font-bold text-black">シークレットリプライ機能はシャドウバンのリスクがあるため、使用は自己責任でお願いします。</span>
                         短時間に大量のメンション送信はスパム判定・凍結の原因になり得ます（遅延・件数の調整を推奨）。
                     </li>
                     <li>
-                        <span className="font-bold text-white">できるだけ「✉️ シークレット（DM送信）」のご利用を推奨します。</span>
+                        <span className="font-bold text-black">できるだけ「✉️ シークレット（DM送信）」のご利用を推奨します。</span>
                         メンションより通知が自然で、相手にも届きやすいためです。
                     </li>
                     <li>
-                        ただし <span className="font-bold text-white">DMには送信数の制限（レートリミット）があり、相手がDMを受信可能に設定している必要があります。</span>
+                        ただし <span className="font-bold text-black">DMには送信数の制限（レートリミット）があり、相手がDMを受信可能に設定している必要があります。</span>
                         制限に達した場合は送信されないことがあります。
                     </li>
                 </ul>
