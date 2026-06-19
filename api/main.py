@@ -398,28 +398,36 @@ async def generate_post(req: GenerateRequest):
         if research_log:
             research_log.append("リサーチ完了。トレンド情報を反映して投稿を生成しました。")
 
-        data = json.loads(result_text)
+        # 空応答ガード: APIキー未設定/モデルエラー時は result_text が空になり、
+        # json.loads("") が "Expecting value: line 1 column 1 (char 0)" を起こす。
+        if not result_text or not result_text.strip():
+            raise RuntimeError(
+                "LLMが空の応答を返しました。XAI_API_KEY または OPENAI_API_KEY の設定・モデル権限を確認してください。"
+            )
+
+        # Markdown コードフェンス (```json ... ```) を剥がしてからパース
+        cleaned = result_text.strip()
+        if cleaned.startswith("```"):
+            import re as _re
+            m = _re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned, _re.I)
+            if m:
+                cleaned = m.group(1).strip()
+
+        data = json.loads(cleaned)
         return GenerateResponse(
             content=data.get("content", "生成エラー：コンテンツが見つかりません"),
             platform=req.platform,
             research_log=research_log,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
+        # 失敗を「200 + エラー本文」で隠さず、非200(502)で返す。
+        # これにより Next 側はリアルタイムリサーチを諦めて通常生成へフォールバックできる
+        # （偽のダミー投稿やエラー文字列を本物の投稿として表示しない）。
         print(f"Generate API Error: {e}")
-        # フォールバック：エラー時もUIが止まらないようにダミーテキストを返す
-        if req.enforce_140_limit:
-            return GenerateResponse(
-                content=f"【生成エラー回避】{req.target_pain}を解決するAIツールを開発しました。\n{req.cta_url}",
-                platform=req.platform,
-                research_log=[f"エラー発生: {str(e)}"],
-            )
-        else:
-            return GenerateResponse(
-                content=f"エラーが発生しました（詳細: {str(e)}）。\n.envのXAI_API_KEYまたはOPENAI_API_KEYを確認してください。",
-                platform=req.platform,
-                research_log=[f"エラー発生: {str(e)}"],
-            )
+        raise HTTPException(status_code=502, detail=f"AIエンジン生成失敗: {str(e)}")
 
 
 @app.post("/api/analyze_knowledge", response_model=AnalyzeResponse)

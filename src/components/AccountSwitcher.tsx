@@ -21,17 +21,18 @@ export default function AccountSwitcher({ accounts, activeId }: { accounts: Item
     const active = accounts.find(a => a.id === activeId) || accounts[0] || null;
 
     async function switchTo(id: string) {
-        if (id === activeId) return;
         setPending(id);
         try {
-            const res = await fetch("/api/x-accounts/active", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ xAccountId: id }),
-            });
-            if (res.ok) {
-                router.refresh();
+            // クリックしたアカウントをアクティブに切替（既にアクティブならスキップ）
+            if (id !== activeId) {
+                await fetch("/api/x-accounts/active", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ xAccountId: id }),
+                });
             }
+            // そのアカウントの設定（APIキー等）ページへ遷移
+            router.push(`/dashboard/accounts/${id}`);
         } finally {
             setPending(null);
         }

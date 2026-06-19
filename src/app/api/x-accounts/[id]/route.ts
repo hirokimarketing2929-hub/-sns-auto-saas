@@ -26,6 +26,12 @@ function mask(xa: any) {
         thresholdImpression: xa.thresholdImpression,
         thresholdConversion: xa.thresholdConversion,
         replyEngagementMinImp: xa.replyEngagementMinImp,
+        targetAudience: xa.targetAudience,
+        targetPain: xa.targetPain,
+        ctaUrl: xa.ctaUrl,
+        competitor1: xa.competitor1,
+        competitor2: xa.competitor2,
+        applyPersonaToGeneration: xa.applyPersonaToGeneration,
         createdAt: xa.createdAt,
         updatedAt: xa.updatedAt,
     };
@@ -57,6 +63,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         "xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret",
         "accountConcept", "profile", "policy",
         "thresholdImpression", "thresholdConversion", "replyEngagementMinImp",
+        "targetAudience", "targetPain", "ctaUrl", "competitor1", "competitor2",
+        "applyPersonaToGeneration",
     ]) {
         if (has(k)) data[k] = body[k];
     }
