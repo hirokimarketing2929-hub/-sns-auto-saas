@@ -33,3 +33,16 @@ export const PROLINE_DIRECT_URL: string =
         ? process.env.NEXT_PUBLIC_PROLINE_DIRECT_URL
         : `${PROLINE_URL.replace(/\/+$/, "")}/direct`;
 
+/**
+ * 初回ログインポップアップの誘導先（オーナー本人の LINE 友だち追加URL）。
+ * ProLine アフィリではなく、オーナーのアカウントに直接つなぐ。
+ * 環境変数 NEXT_PUBLIC_ONBOARDING_LINE_URL があれば優先。
+ */
+const DEFAULT_ONBOARDING_LINE_URL = "https://q169hcpg.autosns.app/addfriend/s/cJb9d1rWoB/@303wiftq";
+
+export const ONBOARDING_LINE_URL: string =
+    process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL && process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL.length > 0
+        ? process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL
+        : DEFAULT_ONBOARDING_LINE_URL;
+
+
