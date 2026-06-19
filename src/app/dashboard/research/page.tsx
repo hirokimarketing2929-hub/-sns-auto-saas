@@ -54,8 +54,9 @@ export default function ResearchPage() {
     const [isFetching, setIsFetching] = useState(false);
     const [result, setResult] = useState<RepurposeResult | null>(null);
 
-    // Manual Tab State
-    const [sourceText, setSourceText] = useState("");
+    // Manual Tab State — ツリー（連投）対応：複数セグメントを保持（最大10）
+    const MAX_THREAD_SEGMENTS = 10;
+    const [sourceSegments, setSourceSegments] = useState<string[]>([""]);
 
     // @username or URL tab state
     const [targetInput, setTargetInput] = useState("");
@@ -124,7 +125,10 @@ export default function ResearchPage() {
 
     // 3. 手動リサーチ（同じくテンプレ化 → テーマ穴埋め）
     const handleManualRepurpose = async () => {
-        if (!sourceText.trim()) {
+        // ツリー（連投）対応：非空セグメントを `---` 区切りで連結して送る。
+        // structure-rewrite は `---` 区切りをツリー型として扱う（システムプロンプト rule 8）。
+        const segments = sourceSegments.map(s => s.trim()).filter(s => s.length > 0);
+        if (segments.length === 0) {
             alert("横展開の元となる投稿テキストを入力してください。");
             return;
         }
@@ -134,10 +138,21 @@ export default function ResearchPage() {
         }
         setFetchedPost(null);
         await executeRepurposeRequest("/api/research/structure-rewrite", {
-            sourcePostText: sourceText,
+            sourcePostText: segments.join("\n\n---\n\n"),
             userTheme: userTheme.trim(),
             ctaUrl: ctaUrl.trim(),
         });
+    };
+
+    // --- 手動ツリー入力のセグメント操作 ---
+    const handleUpdateSegment = (index: number, value: string) => {
+        setSourceSegments(prev => prev.map((s, i) => (i === index ? value : s)));
+    };
+    const handleAddSegment = () => {
+        setSourceSegments(prev => (prev.length >= MAX_THREAD_SEGMENTS ? prev : [...prev, ""]));
+    };
+    const handleRemoveSegment = (index: number) => {
+        setSourceSegments(prev => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
     };
 
     // --- 共通リクエスト実行関数（AI生成系） ---
@@ -292,17 +307,28 @@ export default function ResearchPage() {
         }
         setSavingToSchedulerIdx(index);
         try {
+            // ツリー（`---` 区切り）の場合は、先頭=本文・残り=threadContents としてツリー予約する。
+            const segments = content
+                .split(/\n*-{3,}\n*/)
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+            const rootContent = segments[0] ?? content.trim();
+            const threadContents = segments.slice(1);
+
             const res = await fetch("/api/posts", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    content,
+                    content: rootContent,
+                    ...(threadContents.length > 0 ? { threadContents } : {}),
                     platform: "X",
                     status: "DRAFT",
                 }),
             });
             if (res.ok) {
-                alert("✅ スケジューラーに下書き保存しました。\n左メニュー『投稿スケジューラー』から配信設定できます。");
+                alert(threadContents.length > 0
+                    ? `✅ ツリー（${segments.length}連投）としてスケジューラーに下書き保存しました。\n左メニュー『投稿スケジューラー』から配信設定できます。`
+                    : "✅ スケジューラーに下書き保存しました。\n左メニュー『投稿スケジューラー』から配信設定できます。");
             } else {
                 const err = await res.json().catch(() => ({}));
                 alert(`❌ 保存に失敗しました: ${err.message || res.status}`);
@@ -518,12 +544,47 @@ export default function ResearchPage() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <Textarea
-                                    placeholder="【実は...】という一文で始まる投稿や、箇条書きで構成された投稿など..."
-                                    value={sourceText}
-                                    onChange={(e) => setSourceText(e.target.value)}
-                                    className="min-h-[200px] resize-none bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
-                                />
+                                <div className="space-y-3">
+                                    {sourceSegments.map((seg, i) => (
+                                        <div key={i}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="text-xs font-semibold text-slate-500">
+                                                    {sourceSegments.length > 1 ? `🧵 ツリー ${i + 1}投稿目` : "元の投稿テキスト"}
+                                                </label>
+                                                {sourceSegments.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveSegment(i)}
+                                                        className="text-xs text-slate-400 hover:text-rose-600 inline-flex items-center gap-1"
+                                                    >
+                                                        <X className="w-3 h-3" /> 削除
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <Textarea
+                                                placeholder={i === 0 ? "【実は...】という一文で始まる投稿や、箇条書きで構成された投稿など..." : `${i + 1}投稿目の本文...`}
+                                                value={seg}
+                                                onChange={(e) => handleUpdateSegment(i, e.target.value)}
+                                                className="min-h-[120px] resize-none bg-white border-slate-300 text-slate-900 placeholder:text-slate-400"
+                                            />
+                                        </div>
+                                    ))}
+                                    {sourceSegments.length < MAX_THREAD_SEGMENTS && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handleAddSegment}
+                                            className="w-full border-dashed border-slate-300 text-slate-600 hover:bg-slate-50"
+                                        >
+                                            ＋ ツリー（連投）を追加（最大{MAX_THREAD_SEGMENTS}投稿）
+                                        </Button>
+                                    )}
+                                    {sourceSegments.length > 1 && (
+                                        <p className="text-xs text-slate-500">
+                                            🧵 複数入力するとツリー（連投スレッド）として型を抽出し、提案もツリー形式で返ります。
+                                        </p>
+                                    )}
+                                </div>
 
                                 {/* テーマ入力（必須） */}
                                 <div className="space-y-2 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
@@ -559,7 +620,7 @@ export default function ResearchPage() {
 
                                 <Button
                                     onClick={handleManualRepurpose}
-                                    disabled={isGenerating || !sourceText || !userTheme.trim()}
+                                    disabled={isGenerating || sourceSegments.every(s => !s.trim()) || !userTheme.trim()}
                                     className="w-full h-12 text-md font-bold bg-slate-900 hover:bg-slate-800 text-white"
                                 >
                                     {isGenerating ? (
@@ -739,6 +800,11 @@ export default function ResearchPage() {
                                                         <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${badgeStyle}`}>
                                                             {variant.angle_label}
                                                         </Badge>
+                                                        {/\n*-{3,}\n*/.test(variant.content) && (
+                                                            <Badge variant="outline" className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-800 border-indigo-200">
+                                                                🧵 ツリー
+                                                            </Badge>
+                                                        )}
                                                         {isEditingThis && (
                                                             <Badge variant="outline" className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 border-amber-200">
                                                                 ✏️ 編集中
