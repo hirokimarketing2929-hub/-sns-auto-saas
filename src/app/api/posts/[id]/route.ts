@@ -161,3 +161,32 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         return NextResponse.json({ message: "サーバーエラー" }, { status: 500 });
     }
 }
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user || !session.user.email) {
+        return NextResponse.json({ message: "認証が必要です" }, { status: 401 });
+    }
+
+    try {
+        const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+        if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+
+        const { id: postId } = await params;
+        const post = await prisma.post.findUnique({ where: { id: postId } });
+        if (!post || post.userId !== user.id) {
+            return NextResponse.json({ message: "Post not found or unauthorized" }, { status: 404 });
+        }
+        // 投稿済みは削除不可（実際のXポストは消えないため、誤解を招かないようガード）
+        if (post.status === "PUBLISHED") {
+            return NextResponse.json({ message: "投稿済みは削除できません（下書き・予約のみ削除可能）" }, { status: 400 });
+        }
+
+        await prisma.post.delete({ where: { id: postId } });
+        return NextResponse.json({ ok: true });
+    } catch (error) {
+        console.error("Posts DELETE error:", error);
+        return NextResponse.json({ message: "サーバーエラー" }, { status: 500 });
+    }
+}
+

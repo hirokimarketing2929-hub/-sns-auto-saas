@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { sendToOwnerSheet } from "@/lib/owner-sheets";
 
 export async function POST(req: Request) {
     try {
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
                 password: hashedPassword,
             },
         });
+
+        // 運営の登録一覧シートへ name/email を追記（GAS ウェブフック）。失敗しても登録は成功扱い。
+        sendToOwnerSheet({ type: "registration", name: name || "", email }).catch(() => { /* noop */ });
 
         return NextResponse.json(
             { message: "ユーザー登録が完了しました。ログインしてください。" },

@@ -57,12 +57,27 @@ export async function GET(req: Request) {
                     const publicMetrics = tweet.public_metrics;
                     
                     const impressions = nonPublic?.impression_count ?? publicMetrics?.impression_count ?? 0;
-                    
+
+                    // エンゲージメント指標（public_metrics）と非公開指標（non_public_metrics）も保存。
+                    // non_public_metrics は投稿から約30日間のみ取得可能。取れない場合は既存値維持のため undefined にする。
+                    const likes = publicMetrics?.like_count ?? 0;
+                    const retweets = publicMetrics?.retweet_count ?? 0;
+                    const replies = publicMetrics?.reply_count ?? 0;
+                    const quotes = publicMetrics?.quote_count ?? 0;
+                    const urlClicks = (nonPublic as { url_link_clicks?: number })?.url_link_clicks;
+                    const profileClicks = (nonPublic as { user_profile_clicks?: number })?.user_profile_clicks;
+
                     // DBへUPSERT（externalIdが一致すれば更新、なければ新規作成）
                     await prisma.pastPost.upsert({
                         where: { externalId: tweet.id },
                         update: {
                             impressions: impressions,
+                            likes,
+                            retweets,
+                            replies,
+                            quotes,
+                            ...(typeof urlClicks === "number" ? { urlClicks } : {}),
+                            ...(typeof profileClicks === "number" ? { profileClicks } : {}),
                             // conversions: 将来的に連携先のクリック数を入れることも可能
                         },
                         create: {
@@ -73,6 +88,12 @@ export async function GET(req: Request) {
                             postedAt: tweet.created_at ? new Date(tweet.created_at) : new Date(),
                             externalId: tweet.id,
                             impressions: impressions,
+                            likes,
+                            retweets,
+                            replies,
+                            quotes,
+                            ...(typeof urlClicks === "number" ? { urlClicks } : {}),
+                            ...(typeof profileClicks === "number" ? { profileClicks } : {}),
                             analysisStatus: "UNANALYZED"
                         }
                     });

@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
-import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
+import { researchGenerate } from "@/lib/research-llm";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -196,66 +196,7 @@ export async function POST(req: Request) {
         const winningRules = allKnowledges.filter(k => k.type === "WINNING").map(k => k.content);
         const losingRules = allKnowledges.filter(k => k.type === "LOSING").map(k => k.content);
 
-        // リサーチモード ON: Python AI エンジンの本物のリサーチ(web_search ツールコール)に配線する。
-        // Next が組んだ全文脈をそのまま渡し、戻りの実 research_log を UI へ返す。
-        // エンジン不達時は偽装せず、下の direct-LLM パスへフォールバックして research_unavailable を明示する。
-        let researchUnavailable = false;
-        if (enableResearch) {
-            try {
-                const persona = xAccount as unknown as {
-                    applyPersonaToGeneration?: boolean;
-                    targetAudience?: string; targetPain?: string; accountConcept?: string;
-                    profile?: string; policy?: string; ctaUrl?: string;
-                };
-                const usePersona = persona.applyPersonaToGeneration === true;
-                const engineRes = await callEngine("/api/generate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        platform: "X",
-                        target_audience: usePersona ? (persona.targetAudience || "") : "",
-                        target_pain: usePersona ? (persona.targetPain || "") : "",
-                        cta_url: persona.ctaUrl || "",
-                        account_concept: usePersona ? (persona.accountConcept || "") : "",
-                        profile: usePersona ? (persona.profile || "") : "",
-                        policy: usePersona ? (persona.policy || "") : "",
-                        positive_rules: winningRules,
-                        negative_rules: losingRules,
-                        template_rules: templateRules,
-                        enforce_140_limit: enforce140,
-                        past_posts: pastPosts.slice(0, 5).map(p => ({ imp: p.impressions, content: p.content })),
-                        kpi_data: kpis.map(k => ({ name: k.name, current: k.currentValue, target: k.targetValue })),
-                        user_theme: userTheme,
-                        use_realtime_research: true,
-                    }),
-                });
-                if (engineRes.ok) {
-                    const ed = await engineRes.json() as { content?: string; research_log?: string[] };
-                    const engineContent = typeof ed.content === "string" ? stripUrls(ed.content) : "";
-                    if (engineContent.length > 0) {
-                        return NextResponse.json({
-                            content: engineContent,
-                            platform: "X",
-                            research_log: Array.isArray(ed.research_log) ? ed.research_log : [],
-                            _engine: "python-research",
-                        });
-                    }
-                    // 内容が空ならフォールバック
-                    researchUnavailable = true;
-                } else {
-                    researchUnavailable = true;
-                }
-            } catch (e) {
-                if (e instanceof EngineUnavailableError) {
-                    researchUnavailable = true;
-                    console.warn("research engine unavailable, falling back to direct LLM:", e.message);
-                } else {
-                    throw e;
-                }
-            }
-        }
-
-        // プロバイダ選択（direct-LLM パス。research OFF、または research フォールバック時）
+        // プロバイダ選択（Anthropic 優先 → OpenAI → サーバ環境 Anthropic）。research/direct 双方で使う。
         let provider: Provider | null = null;
         if (settings.anthropicApiKey?.trim()) {
             provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
@@ -268,6 +209,51 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
             }, { status: 400 });
+        }
+
+        // リサーチモード ON: Render/Python 不要。設定の Anthropic/OpenAI キーで各社の web 検索ツールを使い、
+        // 最新トレンドを調べてから投稿を生成する。失敗時は偽装せず direct-LLM パスへフォールバックし
+        // research_unavailable を明示する。
+        let researchUnavailable = false;
+        if (enableResearch) {
+            const usePersona = (xAccount as { applyPersonaToGeneration?: boolean }).applyPersonaToGeneration === true;
+            const researchSystem = [
+                "あなたは X(Twitter) で高エンゲージメントを出すプロのコピーライターです。",
+                "まず web 検索で『今この瞬間』の最新トレンド・ニュース・話題を調べ、それを踏まえて X 投稿を1本だけ作成します。",
+                "出力は完成した投稿本文のみ。説明・前置き・見出し・引用符・コードフェンス・URL は一切含めないでください。",
+                enforce140 ? "本文は必ず 140 文字以内に収めてください。" : "本文は読みやすい長さに収めてください。",
+            ].join("\n");
+            const researchUser = [
+                `【テーマ】${userTheme || "（指定なし。トレンドから最適な切り口を選ぶ）"}`,
+                "",
+                ...(usePersona ? [
+                    `【ターゲット】${xAccount.targetAudience || "（未設定）"}`,
+                    `【悩み】${xAccount.targetPain || "（未設定）"}`,
+                    `【コンセプト】${xAccount.accountConcept || "（未設定）"}`,
+                    "",
+                ] : []),
+                winningRules.length > 0 ? `【勝ちパターン】\n${truncateList(winningRules, 5, 200)}` : "",
+                losingRules.length > 0 ? `【避ける表現】\n${truncateList(losingRules, 5, 150)}` : "",
+                "",
+                "最新トレンドを必ず web 検索で確認し、テーマに沿って今バズりやすい投稿を作ってください。",
+            ].filter(Boolean).join("\n");
+
+            try {
+                const { content: rc, researchLog } = await researchGenerate(provider, researchSystem, researchUser);
+                const cleaned = stripUrls(rc);
+                if (cleaned.length > 0) {
+                    return NextResponse.json({
+                        content: cleaned,
+                        platform: "X",
+                        research_log: researchLog,
+                        _engine: `research:${provider.name}`,
+                    });
+                }
+                researchUnavailable = true;
+            } catch (e) {
+                researchUnavailable = true;
+                console.warn("research generation failed, falling back to direct LLM:", e instanceof Error ? e.message : e);
+            }
         }
 
         const systemText = [

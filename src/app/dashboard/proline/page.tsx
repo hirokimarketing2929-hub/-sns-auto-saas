@@ -633,7 +633,7 @@ function SectionFinal() {
                             className="w-full h-16 bg-white hover:bg-slate-50 text-emerald-700 hover:text-emerald-800 font-black text-lg rounded-full shadow-2xl border-0 transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
                             <Sparkles className="size-5 mr-2" />
-                            30秒で無料アカウントを作成する
+                            30秒・無料でLINE追加してはじめる
                             <ArrowRight className="size-5 ml-2" />
                         </Button>
                     </a>
@@ -702,7 +702,7 @@ function CtaPrimary({ size = "lg" }: { size?: "lg" | "xl" }) {
                 className={`w-full ${heightClass} bg-emerald-500 hover:bg-emerald-600 text-white font-black border-0 rounded-full shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]`}
             >
                 <Sparkles className="size-5 mr-2" />
-                30秒で無料アカウントを作成する
+                30秒・無料でLINE追加してはじめる
                 <ArrowRight className="size-5 ml-2" />
             </Button>
         </a>
@@ -713,7 +713,7 @@ function CtaSecondary() {
     return (
         <a href={PROLINE_REGISTER_URL} target="_blank" rel="noopener noreferrer">
             <Button className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-full shadow-md shadow-emerald-500/20 transition-all">
-                この仕組みを今すぐ手に入れる
+                LINEで今すぐ受け取る
                 <ArrowRight className="size-4 ml-2" />
             </Button>
         </a>

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
     Loader2, RefreshCw, Users, Eye, Target, Sparkles,
     TrendingUp, BarChart3, Activity, Lightbulb, AlertCircle, Scale,
-    MessageCircle, MousePointerClick
+    MessageCircle, MousePointerClick, Heart, Repeat2
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -23,6 +23,8 @@ type Summary = {
     posts: {
         count: number; totalImpressions: number; totalConversions: number;
         totalReplies: number; totalUrlClicks: number;
+        totalLikes: number; totalRetweets: number; totalQuotes: number; totalProfileClicks: number;
+        totalEngagements: number; engagementRate: number;
         avgImpressions: number;
         top: Array<{ id: string; content: string; impressions: number; conversions: number; replies: number; urlClicks: number; likes: number; retweets: number; postedAt: string; externalId?: string | null }>;
         daily: Array<{ date: string; posts: number; impressions: number; replies: number; urlClicks: number; likes: number; retweets: number }>;
@@ -471,6 +473,57 @@ export default function AnalysisPage() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* KPI サマリー 2段目（エンゲージメント） */}
+                    <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+                        <Card className="bg-white border-slate-200">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-slate-500 font-medium">合計いいね（{days}日）</span>
+                                    <Heart className="size-4 text-rose-500" />
+                                </div>
+                                <div className="text-2xl font-bold text-rose-600">{(summary.posts.totalLikes ?? 0).toLocaleString()}</div>
+                                <p className="text-xs text-slate-500 mt-1">1投稿平均 {summary.posts.count > 0 ? Math.round((summary.posts.totalLikes ?? 0) / summary.posts.count) : 0}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-white border-slate-200">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-slate-500 font-medium">合計リポスト（{days}日）</span>
+                                    <Repeat2 className="size-4 text-emerald-500" />
+                                </div>
+                                <div className="text-2xl font-bold text-emerald-600">{(summary.posts.totalRetweets ?? 0).toLocaleString()}</div>
+                                <p className="text-xs text-slate-500 mt-1">引用 {(summary.posts.totalQuotes ?? 0).toLocaleString()}</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-white border-slate-200">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-slate-500 font-medium">エンゲージメント率</span>
+                                    <Activity className="size-4 text-violet-500" />
+                                </div>
+                                <div className="text-2xl font-bold text-violet-600">{summary.posts.engagementRate ?? 0}%</div>
+                                <p className="text-xs text-slate-500 mt-1">(いいね+RT+リプ+引用)÷imp</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-white border-slate-200">
+                            <CardContent className="p-5">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-slate-500 font-medium">プロフクリック（{Math.min(days, 30)}日）</span>
+                                    <Users className="size-4 text-sky-500" />
+                                </div>
+                                <div className="text-2xl font-bold text-sky-600">{(summary.posts.totalProfileClicks ?? 0).toLocaleString()}</div>
+                                <p className="text-xs text-slate-500 mt-1">※ 30日限定メトリクス</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* 指標が0ばかりの時の案内 */}
+                    {summary.posts.count > 0 && summary.posts.totalEngagements === 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+                            ⚠️ いいね/RT等が0の場合、まだX分析データの同期が一巡していない可能性があります（同期cronは定期実行。直近投稿から順次反映されます）。
+                        </div>
+                    )}
 
                     {/* AI インサイト */}
                     <Card className="bg-white border-purple-200 shadow-sm">
