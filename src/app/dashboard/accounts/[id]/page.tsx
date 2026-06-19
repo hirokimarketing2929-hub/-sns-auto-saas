@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ArrowLeft, KeyRound, Save, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, KeyRound, Save, CheckCircle2, Bot, MessageSquare } from "lucide-react";
+import CredentialField from "@/components/CredentialField";
 
 type AccountData = {
     id: string;
@@ -17,6 +18,10 @@ type AccountData = {
     xProfileImageUrl: string | null;
     hasOAuth: boolean;
     hasManualKeys: boolean;
+    xApiKey?: string;
+    xApiSecret?: string;
+    xAccessToken?: string;
+    xAccessSecret?: string;
     accountConcept: string | null;
     profile: string | null;
     policy: string | null;
@@ -60,8 +65,13 @@ export default function AccountSettingsPage() {
         replyEngagementMinImp: "",
         applyPersonaToGeneration: false,
     });
-    // X APIキー（BYOK）— セキュリティ上、既存値は取得せず空欄。入力した時だけ送る。
+    // X APIキー（BYOK）— 保存済みの値を表示し、「編集」を押すまで読み取り専用。
     const [keys, setKeys] = useState({ ...EMPTY_KEYS });
+    // 全アカウント共通の設定（AI / ChatWork）。/api/settings に読み書きする。
+    const [common, setCommon] = useState({ anthropicApiKey: "", openaiApiKey: "", chatworkApiToken: "", chatworkRoomId: "" });
+    // 記入済みフィールドの編集ロック解除状態
+    const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
+    const unlock = (k: string) => setUnlocked(prev => ({ ...prev, [k]: true }));
 
     useEffect(() => {
         if (!id) return;
@@ -92,6 +102,26 @@ export default function AccountSettingsPage() {
                     replyEngagementMinImp: a.replyEngagementMinImp != null ? String(a.replyEngagementMinImp) : "",
                     applyPersonaToGeneration: !!a.applyPersonaToGeneration,
                 });
+                // 保存済み X APIキーを表示用にセット（このアカウント専用）
+                setKeys({
+                    xApiKey: a.xApiKey ?? "",
+                    xApiSecret: a.xApiSecret ?? "",
+                    xAccessToken: a.xAccessToken ?? "",
+                    xAccessSecret: a.xAccessSecret ?? "",
+                });
+                // 全アカウント共通の AI / ChatWork 設定を取得
+                try {
+                    const sres = await fetch("/api/settings");
+                    if (sres.ok) {
+                        const s = await sres.json();
+                        setCommon({
+                            anthropicApiKey: s.anthropicApiKey ?? "",
+                            openaiApiKey: s.openaiApiKey ?? "",
+                            chatworkApiToken: s.chatworkApiToken ?? "",
+                            chatworkRoomId: s.chatworkRoomId ?? "",
+                        });
+                    }
+                } catch { /* 共通設定の取得失敗は致命的でないため無視 */ }
             } catch (e) {
                 setNotice({ type: "error", text: e instanceof Error ? e.message : "読み込みエラー" });
             } finally {
@@ -108,10 +138,10 @@ export default function AccountSettingsPage() {
             setNotice({ type: "error", text: "管理名は必須です" });
             return;
         }
-        // X APIキーは「4つすべて入力」した時だけ更新対象にする（部分入力は無視）。
+        // X APIキーは「編集」で解除された時のみ更新対象にする。解除時は4つすべて必須。
+        const keysUnlocked = (["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const).some(k => unlocked[k]);
         const keysFilled = keys.xApiKey && keys.xApiSecret && keys.xAccessToken && keys.xAccessSecret;
-        const anyKeyTyped = keys.xApiKey || keys.xApiSecret || keys.xAccessToken || keys.xAccessSecret;
-        if (anyKeyTyped && !keysFilled) {
+        if (keysUnlocked && !keysFilled) {
             setNotice({ type: "error", text: "X API キーは4つすべて入力してください（一部だけは保存できません）" });
             return;
         }
@@ -136,11 +166,23 @@ export default function AccountSettingsPage() {
             replyEngagementMinImp: toIntOrNull(form.replyEngagementMinImp) ?? 500,
             applyPersonaToGeneration: form.applyPersonaToGeneration,
         };
-        if (keysFilled) Object.assign(body, keys);
+        if (keysUnlocked) Object.assign(body, keys);
 
         setSaving(true);
         setNotice(null);
         try {
+            // 全アカウント共通の AI / ChatWork 設定を保存（部分更新）
+            await fetch("/api/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    anthropicApiKey: common.anthropicApiKey,
+                    openaiApiKey: common.openaiApiKey,
+                    chatworkApiToken: common.chatworkApiToken,
+                    chatworkRoomId: common.chatworkRoomId,
+                }),
+            });
+
             const res = await fetch(`/api/x-accounts/${id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
@@ -152,8 +194,8 @@ export default function AccountSettingsPage() {
                 return;
             }
             setAcc(d.xAccount);
-            setKeys({ ...EMPTY_KEYS });
-            setNotice({ type: "success", text: keysFilled ? "保存しました（X接続を確認済み）" : "保存しました" });
+            setUnlocked({}); // 保存後は再びロック
+            setNotice({ type: "success", text: keysUnlocked ? "保存しました（X接続を確認済み）" : "保存しました" });
             router.refresh();
         } catch {
             setNotice({ type: "error", text: "通信エラーが発生しました" });
@@ -206,35 +248,97 @@ export default function AccountSettingsPage() {
                 </div>
             )}
 
-            {/* X API キー（BYOK） */}
+            {/* ① 生成AI APIキー（全アカウント共通・最上部） */}
             <Card className="bg-white border-slate-200">
                 <CardHeader>
                     <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
-                        <KeyRound className="w-5 h-5 text-amber-500" /> X(Twitter) API キー（このアカウント専用）
+                        <Bot className="w-5 h-5 text-indigo-500" /> 生成AI APIキー
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 border border-sky-300 text-sky-700">🌐 全アカウント共通</span>
                     </CardTitle>
                     <CardDescription>
-                        {acc?.hasManualKeys
-                            ? "現在 BYOK キーが設定済みです。再設定する場合のみ、4つすべてを入力して保存してください（空欄のままなら現状維持）。"
-                            : acc?.hasOAuth
-                                ? "OAuth 連携済みです。手動キー（BYOK）で上書きする場合のみ、4つすべて入力してください。"
-                                : "このアカウントはまだ X と連携していません。4つのキーをすべて入力して保存すると接続を確認します。"}
+                        投稿生成・リプ案生成・リサーチで使う LLM のキー。どちらか一方でOK（両方ある場合は Claude 優先）。すべてのアカウントで共通利用されます。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <CredentialField
+                        name="anthropicApiKey"
+                        label="Anthropic Claude API Key"
+                        labelExtra={<span className="text-[10px] font-semibold text-indigo-700 bg-indigo-100 border border-indigo-300 rounded-full px-2 py-0.5">推奨</span>}
+                        placeholder="sk-ant-api03-..."
+                        value={common.anthropicApiKey}
+                        onChange={e => setCommon(p => ({ ...p, anthropicApiKey: e.target.value }))}
+                        locked={!!common.anthropicApiKey && !unlocked.anthropicApiKey}
+                        onUnlock={() => unlock("anthropicApiKey")}
+                    />
+                    <CredentialField
+                        name="openaiApiKey"
+                        label="OpenAI API Key"
+                        placeholder="sk-proj-..."
+                        value={common.openaiApiKey}
+                        onChange={e => setCommon(p => ({ ...p, openaiApiKey: e.target.value }))}
+                        locked={!!common.openaiApiKey && !unlocked.openaiApiKey}
+                        onUnlock={() => unlock("openaiApiKey")}
+                    />
+                </CardContent>
+            </Card>
+
+            {/* ② X API キー（このアカウント専用） */}
+            <Card className="bg-white border-slate-200">
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
+                        <KeyRound className="w-5 h-5 text-amber-500" /> X(Twitter) API キー
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 border border-purple-300 text-purple-700">👤 このアカウント専用</span>
+                    </CardTitle>
+                    <CardDescription>
+                        このアカウント専用の X 連携キー。保存済みの値はそのまま表示されます。変更する場合のみ「編集」を押し、4つすべて入力して保存すると X 接続を確認します。
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {(["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const).map(k => (
-                        <div key={k} className="space-y-1">
-                            <Label htmlFor={k} className="text-xs">{k}</Label>
-                            <Input
-                                id={k}
-                                type="password"
-                                autoComplete="off"
-                                placeholder={acc?.hasManualKeys ? "設定済み（変更時のみ入力）" : "未設定"}
-                                value={keys[k]}
-                                onChange={e => setKeys(p => ({ ...p, [k]: e.target.value }))}
-                                className="bg-white"
-                            />
-                        </div>
+                        <CredentialField
+                            key={k}
+                            name={k}
+                            label={k}
+                            placeholder="未設定"
+                            value={keys[k]}
+                            onChange={e => setKeys(p => ({ ...p, [k]: e.target.value }))}
+                            locked={!!keys[k] && !unlocked[k]}
+                            onUnlock={() => unlock(k)}
+                        />
                     ))}
+                </CardContent>
+            </Card>
+
+            {/* ③ ChatWork 連携（全アカウント共通） */}
+            <Card className="bg-white border-slate-200">
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
+                        <MessageSquare className="w-5 h-5 text-sky-500" /> ChatWork 連携
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 border border-sky-300 text-sky-700">🌐 全アカウント共通</span>
+                    </CardTitle>
+                    <CardDescription>
+                        リプ周り半自動化の通知先です。API トークンとルーム ID を設定します。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <CredentialField
+                        name="chatworkApiToken"
+                        label="ChatWork API トークン"
+                        placeholder="ChatWork 設定 → API から取得"
+                        value={common.chatworkApiToken}
+                        onChange={e => setCommon(p => ({ ...p, chatworkApiToken: e.target.value }))}
+                        locked={!!common.chatworkApiToken && !unlocked.chatworkApiToken}
+                        onUnlock={() => unlock("chatworkApiToken")}
+                    />
+                    <CredentialField
+                        name="chatworkRoomId"
+                        label="送信先ルーム ID"
+                        placeholder="例: 123456789"
+                        value={common.chatworkRoomId}
+                        onChange={e => setCommon(p => ({ ...p, chatworkRoomId: e.target.value }))}
+                        locked={!!common.chatworkRoomId && !unlocked.chatworkRoomId}
+                        onUnlock={() => unlock("chatworkRoomId")}
+                    />
                 </CardContent>
             </Card>
 
@@ -332,7 +436,7 @@ export default function AccountSettingsPage() {
                     {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 保存中...</> : <><Save className="w-4 h-4 mr-2" /> 保存する</>}
                 </Button>
                 <span className="text-xs text-slate-400 inline-flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> AI（Claude/OpenAI）キーは全アカウント共通のため「設定」画面で管理します
+                    <CheckCircle2 className="w-3.5 h-3.5" /> AI / ChatWork キーは全アカウント共通、X API キーはこのアカウント専用として保存されます
                 </span>
             </div>
         </div>
