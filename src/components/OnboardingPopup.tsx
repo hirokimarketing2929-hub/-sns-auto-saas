@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PROLINE_DIRECT_URL } from "@/lib/proline";
+import { ONBOARDING_LINE_URL } from "@/lib/proline";
 import { X } from "lucide-react";
 
 // 初回（端末ごとに1回）だけ表示する、ProLine の LINE 登録誘導ポップアップ。
@@ -55,7 +55,7 @@ export default function OnboardingPopup() {
 
                 <div className="p-6 space-y-3">
                     <a
-                        href={PROLINE_DIRECT_URL}
+                        href={ONBOARDING_LINE_URL}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={dismiss}
