@@ -21,18 +21,18 @@ export default function AccountSwitcher({ accounts, activeId }: { accounts: Item
     const active = accounts.find(a => a.id === activeId) || accounts[0] || null;
 
     async function switchTo(id: string) {
+        // 既にアクティブなら何もしない
+        if (id === activeId) return;
         setPending(id);
         try {
-            // クリックしたアカウントをアクティブに切替（既にアクティブならスキップ）
-            if (id !== activeId) {
-                await fetch("/api/x-accounts/active", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ xAccountId: id }),
-                });
-            }
-            // そのアカウントの設定（APIキー等）ページへ遷移
-            router.push(`/dashboard/accounts/${id}`);
+            // クリックした時点でアクティブに切替（右ページに遷移せず、その場で反映）
+            await fetch("/api/x-accounts/active", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ xAccountId: id }),
+            });
+            // サーバーコンポーネント（サイドバー等）を再取得して現在のページのまま切替を反映
+            router.refresh();
         } finally {
             setPending(null);
         }
@@ -59,22 +59,33 @@ export default function AccountSwitcher({ accounts, activeId }: { accounts: Item
                         const isActive = a.id === activeId;
                         const isPending = pending === a.id;
                         return (
-                            <button
+                            <div
                                 key={a.id}
-                                type="button"
-                                onClick={() => switchTo(a.id)}
-                                disabled={isPending}
-                                className={`w-full flex items-center gap-2 px-4 py-2 text-sm text-left transition-colors ${isActive ? "bg-white/10 text-foreground" : "text-foreground/80 hover:bg-white/5"}`}
+                                className={`w-full flex items-center gap-1 pr-2 transition-colors ${isActive ? "bg-white/10" : "hover:bg-white/5"}`}
                             >
-                                {a.xProfileImageUrl ? (
-                                    <img src={a.xProfileImageUrl} alt="icon" className="w-5 h-5 rounded-full ring-1 ring-white/10" />
-                                ) : (
-                                    <span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold">𝕏</span>
-                                )}
-                                <span className="truncate flex-1">{a.displayName}</span>
-                                {isActive && <span className="text-[9px] text-emerald-300 font-bold">●</span>}
-                                {isPending && <span className="text-[9px] text-muted-foreground">…</span>}
-                            </button>
+                                <button
+                                    type="button"
+                                    onClick={() => switchTo(a.id)}
+                                    disabled={isPending}
+                                    className={`flex-1 min-w-0 flex items-center gap-2 px-4 py-2 text-sm text-left ${isActive ? "text-foreground" : "text-foreground/80"}`}
+                                >
+                                    {a.xProfileImageUrl ? (
+                                        <img src={a.xProfileImageUrl} alt="icon" className="w-5 h-5 rounded-full ring-1 ring-white/10" />
+                                    ) : (
+                                        <span className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center text-[10px] font-bold">𝕏</span>
+                                    )}
+                                    <span className="truncate flex-1">{a.displayName}</span>
+                                    {isActive && <span className="text-[9px] text-emerald-300 font-bold">●</span>}
+                                    {isPending && <span className="text-[9px] text-muted-foreground">…</span>}
+                                </button>
+                                <Link
+                                    href={`/dashboard/accounts/${a.id}`}
+                                    title="このアカウントの設定を開く"
+                                    className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10"
+                                >
+                                    <Settings className="size-3.5" />
+                                </Link>
+                            </div>
                         );
                     })}
                     <div className="px-3 mt-2 border-t border-white/5 pt-2">

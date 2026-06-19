@@ -346,6 +346,93 @@ export default function ReplyEngagementPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* ChatWork 通知セットアップ手順 */}
+            <Card className="border-sky-200">
+                <CardHeader>
+                    <CardTitle>📘 ChatWork に通知を受け取る設定手順</CardTitle>
+                    <CardDescription>
+                        この機能の通知は <strong>ChatWork</strong> に届きます。初回のみ以下の設定が必要です（5分ほどで完了）。
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5 text-sm">
+                    <ol className="space-y-4">
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">1</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">ChatWork の API トークンを取得する</p>
+                                <p className="text-muted-foreground">
+                                    ChatWork にログイン →{" "}
+                                    <a href="https://www.chatwork.com/service/packages/chatwork/subpackages/api/token.php" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                                        API 設定ページ
+                                    </a>{" "}
+                                    を開き、表示された <strong>API トークン</strong>（英数字の文字列）をコピーします。
+                                </p>
+                            </div>
+                        </li>
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">2</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">通知を受け取るルームの「ルーム ID」を調べる</p>
+                                <p className="text-muted-foreground">
+                                    通知を受け取りたい ChatWork のルーム（グループチャットやマイチャット）を開き、ブラウザの URL の末尾を見ます。<br />
+                                    例：<code className="bg-slate-100 px-1 rounded">...#!rid<strong>123456789</strong></code> → この <strong>123456789</strong> の部分がルーム ID です。
+                                </p>
+                            </div>
+                        </li>
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">3</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">設定画面に貼り付けて保存する</p>
+                                <p className="text-muted-foreground">
+                                    <Link href="/dashboard/settings" className="text-indigo-600 hover:underline">設定画面</Link> の「💬 ChatWork 連携」欄に、
+                                    <strong>API トークン</strong> と <strong>ルーム ID</strong> を入力して「設定を保存する」を押します。
+                                </p>
+                            </div>
+                        </li>
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">4</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">接続テストで通知が届くか確認する</p>
+                                <p className="text-muted-foreground">
+                                    設定画面の「🔌 接続テスト」「✉️ テストメッセージ送信」ボタンを押すと、指定ルームにテスト通知が届きます。
+                                    ここでメッセージが届けば設定完了です。
+                                </p>
+                            </div>
+                        </li>
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">5</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">AI プロバイダのキーを登録する（リプ案生成に必須）</p>
+                                <p className="text-muted-foreground">
+                                    同じ設定画面で <strong>Anthropic Claude</strong> または <strong>OpenAI</strong> の API キーを登録します（どちらか一方でOK）。
+                                    これが無いとリプ案が生成されず通知も飛びません。
+                                </p>
+                            </div>
+                        </li>
+                        <li className="flex gap-3">
+                            <span className="shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white font-bold flex items-center justify-center text-xs">6</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold">ターゲットを登録して「今すぐチェック」</p>
+                                <p className="text-muted-foreground">
+                                    このページ上部でターゲットアカウントを登録し、「🚀 今すぐチェック」を実行。
+                                    対象の高インプ投稿が見つかると、ChatWork にリプ案 3 本が届きます（通常は 30 分ごとに自動実行）。
+                                </p>
+                            </div>
+                        </li>
+                    </ol>
+
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 space-y-1">
+                        <p className="font-semibold">⚠️ 通知が届かないときのチェック</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                            <li>API トークン / ルーム ID が正しいか（接続テストで確認）</li>
+                            <li>AI プロバイダのキーが登録されているか</li>
+                            <li>有効なターゲットが登録されているか、対象投稿が「リプ対象のインプ閾値」を超えているか</li>
+                            <li>トークンを発行した ChatWork アカウントが、そのルームに参加しているか</li>
+                        </ul>
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 }
