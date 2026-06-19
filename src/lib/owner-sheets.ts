@@ -14,9 +14,12 @@ export type OwnerSheetPayload = {
 };
 
 export async function sendToOwnerSheet(payload: OwnerSheetPayload): Promise<boolean> {
-    const url = process.env.OWNER_LEADS_WEBHOOK_URL;
+    // 既定の送信先（オーナーの GAS ウェブアプリ）。env があればそちらを優先。
+    const DEFAULT_WEBHOOK_URL =
+        "https://script.google.com/macros/s/AKfycbxVL4u16e-Y7ARniUd75c5S9qwze68xbqZNEcgt3TwYXISZdgt9o6bIUP3B1GnI2dqA/exec";
+    const url = process.env.OWNER_LEADS_WEBHOOK_URL || DEFAULT_WEBHOOK_URL;
     if (!url) {
-        console.warn("[owner-sheets] OWNER_LEADS_WEBHOOK_URL 未設定のため送信をスキップしました");
+        console.warn("[owner-sheets] 送信先URL未設定のため送信をスキップしました");
         return false;
     }
     try {
