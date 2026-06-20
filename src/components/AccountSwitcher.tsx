@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Settings, ChevronRight } from "lucide-react";
 
 type Item = {
@@ -15,7 +14,6 @@ type Item = {
 };
 
 export default function AccountSwitcher({ accounts, activeId }: { accounts: Item[]; activeId: string | null }) {
-    const router = useRouter();
     const [pending, setPending] = useState<string | null>(null);
 
     const active = accounts.find(a => a.id === activeId) || accounts[0] || null;
@@ -25,14 +23,16 @@ export default function AccountSwitcher({ accounts, activeId }: { accounts: Item
         if (id === activeId) return;
         setPending(id);
         try {
-            // クリックした時点でアクティブに切替（右ページに遷移せず、その場で反映）
+            // クリックした時点でアクティブに切替（POSTのSet-Cookieで新activeが確定）
             await fetch("/api/x-accounts/active", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ xAccountId: id }),
             });
-            // サーバーコンポーネント（サイドバー等）を再取得して現在のページのまま切替を反映
-            router.refresh();
+            // フルリロードで全ページ（クライアントfetchの自動リプライ/メディア等も含む）を
+            // 新アカウントで再取得する。router.refresh() はサーバーコンポーネントしか更新せず、
+            // useEffect で fetch するクライアントページが切替に追従しないため。
+            window.location.reload();
         } finally {
             setPending(null);
         }
