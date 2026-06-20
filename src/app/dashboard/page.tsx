@@ -433,6 +433,42 @@ export default async function DashboardPage() {
                         <span className="font-semibold text-foreground/80"> クレジット残高 </span>をご確認ください。
                     </p>
                 </div>
+
+                {/* AI（Claude / OpenAI）の料金目安 */}
+                <div className="mt-4 glass rounded-2xl p-5 border border-purple-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="size-4 text-purple-400" />
+                        <span className="text-sm font-bold text-purple-300">AI（投稿生成・リサーチ）の料金について</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                        投稿文の生成・リサーチ・分析には Claude / OpenAI の API を使います。料金は
+                        <span className="font-semibold text-foreground/80">「トークン数」に応じた従量課金</span>で、
+                        設定画面で登録した各社の API キーに直接課金されます（目安：日本語1文字 ≒ 1〜2トークン）。
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {/* Claude */}
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="font-bold text-foreground/90 mb-1.5">Claude（Anthropic）<span className="text-[10px] text-muted-foreground">／100万トークンあたり</span></div>
+                            <ul className="space-y-1 text-[11px] text-muted-foreground">
+                                <li className="flex justify-between"><span>Sonnet 4.6（標準・推奨）</span><span className="text-amber-300 font-semibold">入力 $3 / 出力 $15</span></li>
+                                <li className="flex justify-between"><span>Opus 4.7（高性能）</span><span className="text-rose-300 font-semibold">入力 $15 / 出力 $75</span></li>
+                                <li className="flex justify-between"><span>Haiku 4.5（高速・安価）</span><span className="text-emerald-300 font-semibold">入力 $0.8 / 出力 $4</span></li>
+                            </ul>
+                        </div>
+                        {/* OpenAI */}
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="font-bold text-foreground/90 mb-1.5">GPT（OpenAI）<span className="text-[10px] text-muted-foreground">／100万トークンあたり</span></div>
+                            <ul className="space-y-1 text-[11px] text-muted-foreground">
+                                <li className="flex justify-between"><span>GPT-4o（標準）</span><span className="text-amber-300 font-semibold">入力 $2.5 / 出力 $10</span></li>
+                                <li className="flex justify-between"><span>GPT-4o mini（高速・安価）</span><span className="text-emerald-300 font-semibold">入力 $0.15 / 出力 $0.6</span></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+                        ※ 単価は目安です（最新は各社の公式ページで確認）。上の「今日／今月の推定コスト」は実際の利用トークン数から自動計算しています。
+                        投稿1本の生成はおおむね数円程度ですが、リサーチや大量生成はトークンを多く使うぶん費用が増えます。
+                    </p>
+                </div>
             </div>
 
             {/* Action Steps */}
