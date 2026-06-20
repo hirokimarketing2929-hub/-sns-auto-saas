@@ -78,6 +78,34 @@ export default function AutoReplyPage() {
     const [openingsEditLoading, setOpeningsEditLoading] = useState<Record<string, boolean>>({});
     const [openingsEditError, setOpeningsEditError] = useState<Record<string, string | null>>({});
 
+    // 手動実行（今すぐ実行）の状態：ローディングと実行ログ（id → 文字列配列）
+    const [runNowLoading, setRunNowLoading] = useState<Record<string, boolean>>({});
+    const [runNowLogs, setRunNowLogs] = useState<Record<string, string[] | null>>({});
+
+    // キャンペーンを今すぐ実行してログを取得（interval を無視。実際にリプライも送信される）
+    const handleRunNow = async (id: string) => {
+        setRunNowLoading(prev => ({ ...prev, [id]: true }));
+        setRunNowLogs(prev => ({ ...prev, [id]: null }));
+        try {
+            const res = await fetch("/api/autoreply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "run_now", payload: { id } }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setRunNowLogs(prev => ({ ...prev, [id]: [data?.message || "実行に失敗しました。"] }));
+                return;
+            }
+            const logs: string[] = Array.isArray(data?.details) ? data.details : ["（ログがありません）"];
+            setRunNowLogs(prev => ({ ...prev, [id]: logs }));
+        } catch (err) {
+            setRunNowLogs(prev => ({ ...prev, [id]: [err instanceof Error ? err.message : String(err)] }));
+        } finally {
+            setRunNowLoading(prev => ({ ...prev, [id]: false }));
+        }
+    };
+
     useEffect(() => {
         fetchCampaigns();
     }, []);
@@ -880,6 +908,17 @@ export default function AutoReplyPage() {
                                     </div>
 
                                     <div className="flex md:flex-col gap-2 w-full md:w-auto mt-4 md:mt-0 justify-end">
+                                        {effectiveActive && (
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handleRunNow(campaign.id)}
+                                                disabled={!!runNowLoading[campaign.id]}
+                                                className="border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-400"
+                                                title="チェック間隔を待たずに今すぐ実行し、結果ログを表示します（条件に合えば実際にリプライも送信されます）"
+                                            >
+                                                {runNowLoading[campaign.id] ? "実行中..." : "▶ 今すぐ実行"}
+                                            </Button>
+                                        )}
                                         <Button
                                             variant={effectiveActive ? "outline" : "default"}
                                             onClick={() => {
@@ -903,6 +942,29 @@ export default function AutoReplyPage() {
                                         </Button>
                                     </div>
                                 </CardContent>
+
+                                {/* 手動実行の結果ログ */}
+                                {runNowLogs[campaign.id] && (
+                                    <div className="mx-5 mb-5 -mt-2 rounded-md border border-emerald-500/20 bg-black/30 p-3">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-bold text-emerald-400">▶ 実行ログ（最新）</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setRunNowLogs(prev => ({ ...prev, [campaign.id]: null }))}
+                                                className="text-[11px] text-muted-foreground hover:text-foreground"
+                                            >
+                                                閉じる
+                                            </button>
+                                        </div>
+                                        <pre className="text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+{(runNowLogs[campaign.id] || []).join("\n")}
+                                        </pre>
+                                        <p className="text-[10px] text-muted-foreground mt-1">
+                                            「Liked users found: N」が0なら、対象ポストURLが正しいか／別アカで本当にいいねしたかを確認してください。
+                                            「API Error」が出る場合はそのアカウントのXキー/プランをご確認ください。
+                                        </p>
+                                    </div>
+                                )}
                             </Card>
                             );
                         })}
