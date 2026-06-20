@@ -36,11 +36,10 @@ export const authOptions: NextAuthOptions = {
                 params: {
                     // users.read / tweet.read / tweet.write: 投稿系
                     // like.read: 自動リプライの「いいね検出」(liking_users)に必須
-                    // dm.read / dm.write: 自動DM機能用
                     // offline.access: refresh_token 取得
-                    // ※ X Developer Portal の User authentication settings で
-                    //   "Read and write and Direct message" を有効化している必要あり
-                    scope: "users.read tweet.read tweet.write like.read dm.read dm.write offline.access",
+                    // ※ dm.read / dm.write は X の OAuth2 同意画面が真っ白になる事象の切り分けのため
+                    //   一旦除外（DM自動送信は BYOK で対応可。接続成立を最優先）。
+                    scope: "users.read tweet.read tweet.write like.read offline.access",
                 },
             },
             allowDangerousEmailAccountLinking: true,
