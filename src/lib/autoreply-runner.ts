@@ -265,12 +265,15 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
             }
 
             try {
-                // 送信方式に応じて投稿方法を分岐
+                // 送信方式に応じて投稿方法を分岐。
+                // 「通常リプ(REPLY)」は廃止: いいね/RT した人は自分でツイートしていないため返信対象が存在せず、
+                // 元投稿にぶら下げても相手に届かず・同一本文で duplicate content 拒否になるだけ。
+                // よって配信は DM か メンション の2択。非DMは全てメンション（レガシーREPLYもここに落ちる）。
                 if (campaign.replyType === "DM") {
                     const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
                     const dmResp = await twitterClient.v2.sendDmToParticipant(targetUser.userId, { text: replyText });
                     await logXApiUsage({ userId: campaign.userId, operation: "x-send-dm", rateLimit: pickRateLimit(dmResp) });
-                } else if (campaign.replyType === "MENTION") {
+                } else {
                     if (!targetUser.username || targetUser.username === "unknown") {
                         runLogs.push(`Skip MENTION for ${targetUser.userId}: username unresolved`);
                         continue;
@@ -278,10 +281,6 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                     const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
                     const tweetResp = await twitterClient.v2.tweet(`@${targetUser.username} ${replyText}`);
                     await logXApiUsage({ userId: campaign.userId, operation: "x-tweet-mention", rateLimit: pickRateLimit(tweetResp) });
-                } else {
-                    const replyText = buildReplyText(openingVariants, startingOpeningIndex + localOpeningsSent, replyContent);
-                    const replyResp = await twitterClient.v2.reply(replyText, targetPostId);
-                    await logXApiUsage({ userId: campaign.userId, operation: "x-reply", rateLimit: pickRateLimit(replyResp) });
                 }
 
                 // 送信成功としてログに記録する（二重送信防止）
@@ -296,16 +295,23 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                 if (openingVariants.length > 0) localOpeningsSent++;
                 sentThisRun++;
 
-                runLogs.push(`✅ Replied to ${targetUser.userId} (@${targetUser.username}) via ${campaign.replyType} (Event: ${targetUser.event})`);
+                // 実際の配信方式（DM 以外は全てメンション）を表示する。
+                const delivery = campaign.replyType === "DM" ? "DM" : "MENTION";
+                runLogs.push(`✅ Replied to ${targetUser.userId} (@${targetUser.username}) via ${delivery} (Event: ${targetUser.event})`);
 
                 // Rate Limit・凍結対策のため、送信ごとにランダムなジッター待機を挟む
                 await new Promise(resolve => setTimeout(resolve, randomJitterMs()));
 
             } catch (replyError: unknown) {
                 const err = replyError as { message?: string; data?: { detail?: string; title?: string } };
-                const detail = err?.data?.detail || err?.data?.title || err?.message || "Unknown error";
+                let detail = err?.data?.detail || err?.data?.title || err?.message || "Unknown error";
+                const delivery = campaign.replyType === "DM" ? "DM" : "MENTION";
+                // DM が権限エラーで落ちた場合の原因ヒント（OAuth連携は dm.write を外しているため）。
+                if (delivery === "DM" && /403|permission|not allowed|oauth|scope|dm\.write/i.test(detail)) {
+                    detail += "（OAuth連携アカウントではDM送信不可: dm.write 権限なし。DMはBYOK(自前APIキー)アカウントでのみ利用できます。メンション方式への変更を推奨）";
+                }
                 console.error(`Failed to send reply to ${targetUser.userId}:`, replyError);
-                runLogs.push(`❌ Failed reply to ${targetUser.userId} (@${targetUser.username}) via ${campaign.replyType}: ${detail}`);
+                runLogs.push(`❌ Failed reply to ${targetUser.userId} (@${targetUser.username}) via ${delivery}: ${detail}`);
                 await logXApiUsage({ userId: campaign.userId, operation: `x-send-${campaign.replyType.toLowerCase()}`, success: false, errorMessage: detail });
             }
         }

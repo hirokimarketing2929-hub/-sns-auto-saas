@@ -131,7 +131,7 @@ export async function POST(req: Request) {
                     keyword: isTriggerReply ? keyword : null, // 特定リプ判定がONのときだけ保存
                     replyContent,
                     isActive: true,
-                    replyType: replyType || "REPLY",
+                    replyType: replyType === "DM" ? "DM" : "MENTION", // 通常リプ(REPLY)は廃止: DM か メンションの2択
                     endsAt: endsAtDate,
                     checkIntervalMinutes: safeInterval,
                     triggerMode: safeTriggerMode,
