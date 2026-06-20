@@ -94,3 +94,20 @@ DATABASE_URL="<本番>" node scripts-migrate-x-account-persona.mjs
 ### D. デプロイ後スモーク
 - ログイン（メール / X OAuth）/ 投稿生成 / スケジュール作成 / 設定保存 が動くこと。
 - `/dashboard/proline` の最終CTAがアフィリリンクの `/direct`（LINE友だち追加に直行）を指していること。
+
+### E. 自動化(cron)の有効化 — Vercel Hobby の場合は GitHub Actions
+予約投稿・自動リプライ・インプレ追撃は cron エンドポイントで実行される：
+`/api/cron/publish`, `/api/cron/autoreply`, `/api/cron/check-impressions`（いずれも GET + `Authorization: Bearer $CRON_SECRET`）。
+
+**Vercel Pro** なら `vercel.json` の `crons` に追記すれば毎分実行できる。
+**Vercel Hobby（無料）** は cron が「1日1回・最大2個」に制限されるため、リポジトリ同梱の
+`.github/workflows/cron.yml`（GitHub Actions・**5分間隔**）で上記3つを定期的に叩く。手順：
+
+1. GitHub リポジトリ → **Settings → Secrets and variables → Actions** で2つ登録：
+   - `APP_URL` = 本番URL（例 `https://prox-app.vercel.app`・末尾スラッシュ無し）
+   - `CRON_SECRET` = Vercel env の `CRON_SECRET` と**同じ値**
+2. リポジトリの **Actions が有効**であること。
+3. Actions タブ → 「Scheduled Cron」→ **Run workflow** で手動実行し、ログに各 `-> 200` が出るか確認。
+
+制約: GitHub Actions のスケジュールは最短5分・ベストエフォート（高負荷時遅延・リポジトリ60日無活動で自動停止）。
+分単位の正確さが必要なら [cron-job.org](https://cron-job.org)（1分・無料）等で同じ3つのURLを Bearer 付きで叩いてもよい。

@@ -1,0 +1,53 @@
+name: Scheduled Cron
+
+# Vercel Hobby プランは cron が「1日1回・最大2個」に制限されるため、
+# 予約投稿・自動リプライ・インプレ追撃の定期実行を GitHub Actions から
+# 各 cron エンドポイント（GET + Bearer 認証）を叩くことで実現する。
+#
+# 必要なリポジトリ Secrets:
+#   APP_URL      … 本番URL（例: https://prox-app.vercel.app。末尾スラッシュ無し）
+#   CRON_SECRET  … Vercel の環境変数 CRON_SECRET と同じ値
+
+on:
+  schedule:
+    # GitHub Actions の最小間隔は 5 分（ベストエフォート、遅延あり）
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: scheduled-cron
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish scheduled posts
+        continue-on-error: true
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -m 60 -X GET "$APP_URL/api/cron/publish" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -w "\npublish -> %{http_code}\n"
+
+      - name: Run auto-replies
+        continue-on-error: true
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -m 120 -X GET "$APP_URL/api/cron/autoreply" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -w "\nautoreply -> %{http_code}\n"
+
+      - name: Check impressions
+        continue-on-error: true
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -m 60 -X GET "$APP_URL/api/cron/check-impressions" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -w "\ncheck-impressions -> %{http_code}\n"
