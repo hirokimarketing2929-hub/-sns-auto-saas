@@ -54,7 +54,8 @@ export default async function DashboardLayout({
     const twitterAccount = linkedAccounts.find((acc: any) => acc.provider === "twitter");
     if (twitterAccount && twitterAccount.scope) {
         // 旧ユーザー互換のため dm.* は必須にしない（新規 OAuth では auth.ts で要求される）
-        const requiredScopes = ["tweet.write", "offline.access"];
+        // like.read は自動リプライのいいね検出に必須のため、未付与なら再連携を促す。
+        const requiredScopes = ["tweet.write", "like.read", "offline.access"];
         const grantedScopes = twitterAccount.scope.split(" ");
         const missingScopes = requiredScopes.filter(s => !grantedScopes.includes(s));
         if (missingScopes.length > 0) {
