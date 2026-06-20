@@ -33,12 +33,15 @@ export const authOptions: NextAuthOptions = {
             clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
             version: "2.0", // OAuth 2.0を使用
             authorization: {
+                // NextAuth v4 の既定は旧 twitter.com ドメインで authorize URL を生成するが、
+                // X では同意画面が x.com でないと描画されず真っ白になる。x.com に明示上書きする。
+                url: "https://x.com/i/oauth2/authorize",
                 params: {
                     // users.read / tweet.read / tweet.write: 投稿系
                     // like.read: 自動リプライの「いいね検出」(liking_users)に必須
                     // offline.access: refresh_token 取得
-                    // ※ dm.read / dm.write は X の OAuth2 同意画面が真っ白になる事象の切り分けのため
-                    //   一旦除外（DM自動送信は BYOK で対応可。接続成立を最優先）。
+                    // ※ dm.read / dm.write は接続成立を優先して一旦除外（DM自動送信は BYOK で対応可）。
+                    //   x.com 化で同意画面が出ることを確認後、必要なら段階的に戻す。
                     scope: "users.read tweet.read tweet.write like.read offline.access",
                 },
             },
