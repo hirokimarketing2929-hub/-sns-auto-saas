@@ -65,7 +65,9 @@ export default function XAccountManager() {
             if (res.ok) {
                 setActiveId(id);
                 setNotice({ type: "success", text: "アクティブアカウントを切替えました" });
-                router.refresh();
+                // フルリロードで全ページ（クライアントfetchの自動リプライ/メディア等含む）を
+                // 新アカウントで読み直す。router.refresh() はサーバーコンポーネントしか更新しないため。
+                window.location.reload();
             } else {
                 const d = await res.json().catch(() => ({}));
                 setNotice({ type: "error", text: d?.message || "切替に失敗しました" });
