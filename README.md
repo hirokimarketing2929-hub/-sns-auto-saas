@@ -50,6 +50,7 @@ uvicorn main:app --reload --port 8000
 ## 環境変数
 すべて `.env.example` に記載。必須: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
 `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `AI_ENGINE_URL`。
+本番DBは Render の PostgreSQL（`proxeziento`）。`DATABASE_URL` はその接続文字列。
 マネタイズ用(任意): `NEXT_PUBLIC_PROLINE_URL` / `NEXT_PUBLIC_PROLINE_DIRECT_URL`。
 オーナーのProLineアフィリリンク(`https://q169hcpg.proline.blog`)はコードに焼き込み済みのため通常は設定不要。別リンクに差し替える場合のみ指定する。
 
@@ -57,26 +58,22 @@ uvicorn main:app --reload --port 8000
 
 ## 本番デプロイ手順（ローカル → 本番）
 
-> ⚠️ **DBが最大の注意点。** 本プロジェクトは以前 `prisma db push` 運用で、本番DBに
-> マイグレーション履歴テーブル(`_prisma_migrations`)が無い可能性がある。
-> 既存テーブルがある本番DBへ初回 `migrate deploy` をそのまま実行すると「テーブルが既に存在する」で失敗する。
-> 下記の **baseline** 手順を必ず踏むこと。
+> ⚠️ **DBが最大の注意点。** 本番DBは Render の PostgreSQL（`proxeziento`）で、`prisma db push` 運用のため
+> マイグレーション履歴テーブル(`_prisma_migrations`)が無い。`build` は `migrate deploy` を**実行しない**
+> （`prisma generate && next build`）ので、スキーマ変更時は下記手順で別途同期する。
 
 ### A. Next.js（Vercel）
 1. Vercel の Environment Variables に `.env.example` の必須キーを登録（`NEXTAUTH_URL` は本番ドメイン）。
-2. **DBマイグレーションの整合**（ローカルから本番 `DATABASE_URL` を指定して実行）:
+   `DATABASE_URL` は Render の接続文字列。
+2. **スキーマに変更がある場合のみ** 同期（ローカルから本番 `DATABASE_URL` を指定）:
    ```bash
-   # 現状確認
-   DATABASE_URL="<本番>" npm run db:status
-
-   # ケース1: 本番DBが空 → そのまま適用
-   DATABASE_URL="<本番>" npm run db:deploy
-
-   # ケース2: 本番DBに既にテーブルがある（履歴なし）→ 初回マイグレーションを「適用済み」として登録
-   DATABASE_URL="<本番>" npm run db:baseline   # 20260618120904_init を applied 扱いに
-   DATABASE_URL="<本番>" npm run db:deploy      # 以降の差分のみ適用
+   # 差分確認（読み取りのみ）
+   DATABASE_URL="<本番>" npx prisma migrate diff --from-url "<本番>" --to-schema-datamodel prisma/schema.prisma --script
+   # 既存テーブルへ不足分を反映（非破壊。必要な列のみ追加）
+   DATABASE_URL="<本番>" npx prisma db push
+   # 自動リプライ列だけを冪等に補完したい場合は下記でも可
+   #   psql "<本番>" -f scripts/ensure-autoreply-schema.sql
    ```
-   > スキーマに差分がある場合は事前に `prisma migrate diff` で確認し、必要なら新規マイグレーションを作成する。
 3. ブランチを `main` にマージ → Vercel が自動ビルド/デプロイ。
 4. cron 疎通確認: `curl -H "Authorization: Bearer $CRON_SECRET" https://<本番>/api/cron/publish` が 200。
 

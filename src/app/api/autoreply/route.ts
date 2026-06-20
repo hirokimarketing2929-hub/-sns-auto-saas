@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { runAutoReplyForCampaigns } from "@/lib/autoreply-runner";
 
 // 冒頭バリエーション（最大100通り）を payload から取り出して JSON 文字列化する。
 // 受け取り形式は string[]（推奨）/ 改行区切りの単一 string / それ以外（null扱い）に対応。
@@ -183,6 +184,33 @@ export async function POST(req: Request) {
                 data: { openingVariants: normalized, openingsSentCount: 0 }
             });
             return NextResponse.json({ campaign: updated });
+
+        } else if (action === "run_now") {
+            // 手動実行: 本人の稼働中キャンペーンを interval 無視で即実行し、実行ログを返す。
+            // 二重送信は AutoReplyLog で防止（＝実際にリプライも送信される本番動作）。
+            // payload.id があればその1件のみ、無ければ本人の全稼働中キャンペーンを対象。
+            const { id } = payload || {};
+
+            // 期限切れを同期的に反映してから対象を取得
+            const now = new Date();
+            await db.autoReplyCampaign.updateMany({
+                where: { userId: user.id, isActive: true, endsAt: { not: null, lte: now } },
+                data: { isActive: false },
+            });
+
+            const campaigns = await db.autoReplyCampaign.findMany({
+                where: { userId: user.id, isActive: true, ...(id ? { id } : {}) },
+            });
+
+            if (!campaigns || campaigns.length === 0) {
+                return NextResponse.json({
+                    details: ["稼働中のキャンペーンが見つかりませんでした（期限切れ・停止中・対象外の可能性）。"],
+                    processedCampaigns: 0,
+                });
+            }
+
+            const details = await runAutoReplyForCampaigns(campaigns, db);
+            return NextResponse.json({ details, processedCampaigns: campaigns.length });
         }
 
         return NextResponse.json({ message: "Invalid action" }, { status: 400 });
