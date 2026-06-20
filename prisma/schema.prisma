@@ -3,8 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // アプリ実行用。Supabase では pgbouncer プーラー(6543)も可。
+  url       = env("DATABASE_URL")
+  // マイグレーション用の直結(5432)。未設定なら DATABASE_URL にフォールバックさせるため
+  // Vercel/本番では両方を設定する（Supabase の Connection string から取得）。
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

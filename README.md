@@ -48,8 +48,11 @@ uvicorn main:app --reload --port 8000
 ---
 
 ## 環境変数
-すべて `.env.example` に記載。必須: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
+すべて `.env.example` に記載。必須: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
 `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `AI_ENGINE_URL`。
+- `DATABASE_URL` … アプリ実行用（Supabase は Transaction プーラー / 6543 推奨）。
+- `DIRECT_URL` … マイグレーション用の直結（Session / 5432）。`build` の `prisma migrate deploy` が使用。
+  プーラーを使わないなら両方に同じ直結URLを入れてもよい。
 マネタイズ用(任意): `NEXT_PUBLIC_PROLINE_URL` / `NEXT_PUBLIC_PROLINE_DIRECT_URL`。
 オーナーのProLineアフィリリンク(`https://q169hcpg.proline.blog`)はコードに焼き込み済みのため通常は設定不要。別リンクに差し替える場合のみ指定する。
 
@@ -57,27 +60,29 @@ uvicorn main:app --reload --port 8000
 
 ## 本番デプロイ手順（ローカル → 本番）
 
-> ⚠️ **DBが最大の注意点。** 本プロジェクトは以前 `prisma db push` 運用で、本番DBに
-> マイグレーション履歴テーブル(`_prisma_migrations`)が無い可能性がある。
-> 既存テーブルがある本番DBへ初回 `migrate deploy` をそのまま実行すると「テーブルが既に存在する」で失敗する。
-> 下記の **baseline** 手順を必ず踏むこと。
+> ℹ️ **build がマイグレーションを自動実行する。** `npm run build` は
+> `prisma generate && prisma migrate deploy && next build`。**新規・空のDB**なら Vercel ビルド時に
+> 全テーブルが自動作成される（ターミナル作業不要）。
+> ⚠️ **既存テーブルがある（履歴なし）DB**に初回 `migrate deploy` を実行すると「テーブルが既に存在する」(P3005)で
+> 失敗する。その場合は下記 **baseline** を先に踏むこと。
 
-### A. Next.js（Vercel）
-1. Vercel の Environment Variables に `.env.example` の必須キーを登録（`NEXTAUTH_URL` は本番ドメイン）。
-2. **DBマイグレーションの整合**（ローカルから本番 `DATABASE_URL` を指定して実行）:
-   ```bash
-   # 現状確認
-   DATABASE_URL="<本番>" npm run db:status
+### A. Next.js（Vercel）— 新規・空のSupabase DB（推奨）
+1. Supabase で新規プロジェクト作成 → "Connect" から接続文字列を取得。
+2. Vercel の Environment Variables に `.env.example` の必須キーを登録:
+   `DATABASE_URL`(pooler/6543), `DIRECT_URL`(直結/5432), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`(本番ドメイン),
+   `TWITTER_CLIENT_ID/SECRET`, `ANTHROPIC_API_KEY`, `CRON_SECRET`。
+3. ブランチを `main` にマージ → Vercel が自動ビルド（`migrate deploy` が全テーブル作成 → `next build`）。
+4. 割り当てURL `/login` で新規登録 → ダッシュボード表示。
 
-   # ケース1: 本番DBが空 → そのまま適用
-   DATABASE_URL="<本番>" npm run db:deploy
-
-   # ケース2: 本番DBに既にテーブルがある（履歴なし）→ 初回マイグレーションを「適用済み」として登録
-   DATABASE_URL="<本番>" npm run db:baseline   # 20260618120904_init を applied 扱いに
-   DATABASE_URL="<本番>" npm run db:deploy      # 以降の差分のみ適用
-   ```
-   > スキーマに差分がある場合は事前に `prisma migrate diff` で確認し、必要なら新規マイグレーションを作成する。
-3. ブランチを `main` にマージ → Vercel が自動ビルド/デプロイ。
+### A'. 既存テーブルがあるDBを使う場合のみ（baseline）
+```bash
+DATABASE_URL="<本番>" DIRECT_URL="<本番直結>" npm run db:status
+# 既にテーブルがある（履歴なし）→ 初回マイグレーションを「適用済み」として登録してから以降の差分を適用
+DATABASE_URL="<本番>" DIRECT_URL="<本番直結>" npm run db:baseline
+DATABASE_URL="<本番>" DIRECT_URL="<本番直結>" npm run db:deploy
+```
+> スキーマに差分がある場合は事前に `prisma migrate diff` で確認し、必要なら新規マイグレーションを作成する。
+> 緊急時の自動リプライ列のみの手動補完は `scripts/ensure-autoreply-schema.sql`（冪等）も利用可。
 4. cron 疎通確認: `curl -H "Authorization: Bearer $CRON_SECRET" https://<本番>/api/cron/publish` が 200。
 
 ### B. Python AIエンジン（Render）
