@@ -18,7 +18,7 @@ export default function MediaLibraryPage() {
     const fetchMedia = async () => {
         setLoading(true);
         try {
-            const res = await fetch("/api/media");
+            const res = await fetch("/api/media", { cache: "no-store" });
             if (res.ok) {
                 const data = await res.json();
                 setMediaItems(data.media || []);

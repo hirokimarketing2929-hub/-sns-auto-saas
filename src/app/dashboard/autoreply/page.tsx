@@ -112,7 +112,7 @@ export default function AutoReplyPage() {
 
     const fetchCampaigns = async () => {
         try {
-            const res = await fetch("/api/autoreply");
+            const res = await fetch("/api/autoreply", { cache: "no-store" });
             const data = await res.json();
             if (res.ok) {
                 setCampaigns(data.campaigns || []);
