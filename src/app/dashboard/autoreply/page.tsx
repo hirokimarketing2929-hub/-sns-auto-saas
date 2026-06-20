@@ -583,13 +583,6 @@ export default function AutoReplyPage() {
                         <div>
                             <label className="text-sm font-medium text-foreground/80 block mb-2">送信方式の選択</label>
                             <div className="space-y-2">
-                                <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'REPLY' ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/10 hover:bg-white/5'}`}>
-                                    <input type="radio" value="REPLY" checked={newReplyType === 'REPLY'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-blue-500" />
-                                    <div>
-                                        <span className="text-sm font-bold block text-foreground">💬 通常リプライ</span>
-                                        <span className="text-xs text-muted-foreground block">対象のポストのツリー上にそのまま公開リプライとしてぶら下げます。</span>
-                                    </div>
-                                </label>
                                 <label className={`flex items-center gap-3 cursor-pointer p-3 border rounded-md transition-colors ${newReplyType === 'MENTION' ? 'border-purple-500/50 bg-purple-500/10' : 'border-white/10 hover:bg-white/5'}`}>
                                     <input type="radio" value="MENTION" checked={newReplyType === 'MENTION'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-purple-500" />
                                     <div>
@@ -799,8 +792,8 @@ export default function AutoReplyPage() {
                                                     判定: {campaign.triggerMode === "AND" ? "AND（すべて）" : "OR（いずれか）"}
                                                 </span>
                                             )}
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${campaign.replyType === 'DM' ? 'bg-pink-500/10 text-pink-400 border-pink-500/30' : campaign.replyType === 'MENTION' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-white/10 text-muted-foreground border-white/20'}`}>
-                                                {campaign.replyType === 'DM' ? '✉️ DM' : campaign.replyType === 'MENTION' ? '🤫 メンション' : '💬 通常リプライ'}
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${campaign.replyType === 'DM' ? 'bg-pink-500/10 text-pink-400 border-pink-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30'}`}>
+                                                {campaign.replyType === 'DM' ? '✉️ DM' : '🤫 メンション'}
                                             </span>
                                             {campaign.endsAt && (
                                                 <span className={`px-2 py-0.5 rounded text-xs font-bold border ${new Date(campaign.endsAt) <= new Date()
