@@ -5,6 +5,7 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { v4 as uuidv4 } from "uuid";
 import { prisma } from "@/lib/prisma";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 export async function POST(req: Request) {
     const session = await getServerSession(authOptions);
@@ -56,12 +57,16 @@ export async function POST(req: Request) {
         // アクセス可能なURLパス
         const url = `/uploads/${uniqueFilename}`;
 
+        // アカウント別分離: アップロードを現在アクティブな XAccount に紐付け
+        const xAccountId = await getActiveXAccountId(user.id);
+
         // DBにメディア情報を登録し、ユーザーの使用容量を更新
         try {
             await db.$transaction([
                 db.media.create({
                     data: {
                         userId: user.id,
+                        xAccountId,
                         filename: originalName,
                         url: url,
                         size: fileSize,

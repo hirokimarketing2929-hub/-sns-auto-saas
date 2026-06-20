@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { runAutoReplyForCampaigns } from "@/lib/autoreply-runner";
+import { getActiveXAccountId } from "@/lib/active-x-account";
 
 // 冒頭バリエーション（最大100通り）を payload から取り出して JSON 文字列化する。
 // 受け取り形式は string[]（推奨）/ 改行区切りの単一 string / それ以外（null扱い）に対応。
@@ -41,20 +42,34 @@ export async function GET(req: Request) {
 
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
+        // アカウント別分離: アクティブな XAccount を取得
+        const xAccountId = await getActiveXAccountId(user.id);
+
+        // レガシー救済: xAccountId 未設定（旧仕様で作られた）キャンペーンを、現在アクティブな
+        // アカウントへ一括移管する（冪等。一度移管すれば以後 null は残らない）。
+        if (xAccountId) {
+            await db.autoReplyCampaign.updateMany({
+                where: { userId: user.id, xAccountId: null },
+                data: { xAccountId },
+            });
+        }
+
         // GET 時にも期限切れを同期的に反映：endsAt を過ぎた稼働中キャンペーンを isActive=false に倒す
         // （cron は 5 分ごとだが、UI を開いた瞬間にも同期されるようにする）
         const now = new Date();
         await db.autoReplyCampaign.updateMany({
             where: {
                 userId: user.id,
+                xAccountId,
                 isActive: true,
                 endsAt: { not: null, lte: now },
             },
             data: { isActive: false },
         });
 
+        // アクティブアカウントのキャンペーンだけを返す（アカウント別に完全分離）
         const campaigns = await db.autoReplyCampaign.findMany({
-            where: { userId: user.id },
+            where: { userId: user.id, xAccountId },
             orderBy: { createdAt: "desc" },
         });
 
@@ -76,6 +91,9 @@ export async function POST(req: Request) {
         const db = prisma as any;
         const user = await db.user.findUnique({ where: { email: session.user.email } });
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+
+        // アカウント別分離: アクティブな XAccount（作成時の紐付け・手動実行の絞り込みに使用）
+        const xAccountId = await getActiveXAccountId(user.id);
 
         const { action, payload } = await req.json();
 
@@ -104,6 +122,7 @@ export async function POST(req: Request) {
             const newCampaign = await db.autoReplyCampaign.create({
                 data: {
                     userId: user.id,
+                    xAccountId, // 作成したアカウントに紐付け（アカウント別分離）
                     name,
                     targetUrl,
                     isTriggerRt: !!isTriggerRt,
@@ -194,12 +213,13 @@ export async function POST(req: Request) {
             // 期限切れを同期的に反映してから対象を取得
             const now = new Date();
             await db.autoReplyCampaign.updateMany({
-                where: { userId: user.id, isActive: true, endsAt: { not: null, lte: now } },
+                where: { userId: user.id, xAccountId, isActive: true, endsAt: { not: null, lte: now } },
                 data: { isActive: false },
             });
 
+            // アクティブアカウントの稼働中キャンペーンのみ即実行（アカウント別分離）
             const campaigns = await db.autoReplyCampaign.findMany({
-                where: { userId: user.id, isActive: true, ...(id ? { id } : {}) },
+                where: { userId: user.id, xAccountId, isActive: true, ...(id ? { id } : {}) },
             });
 
             if (!campaigns || campaigns.length === 0) {
