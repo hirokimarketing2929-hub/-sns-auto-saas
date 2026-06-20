@@ -482,6 +482,10 @@ export default function AutoReplyPage() {
                         ただし <span className="font-bold text-black">DMには送信数の制限（レートリミット）があり、相手がDMを受信可能に設定している必要があります。</span>
                         制限に達した場合は送信されないことがあります。
                     </li>
+                    <li>
+                        <span className="font-bold text-black">DM送信を使うには、X連携アカウントの「再連携(/relink)」でDM権限の許可が必要です。</span>
+                        以前に連携したアカウントはDM権限を持っていないため、一度再連携してください（新規連携は自動で許可されます）。
+                    </li>
                 </ul>
             </div>
 
@@ -594,7 +598,7 @@ export default function AutoReplyPage() {
                                     <input type="radio" value="DM" checked={newReplyType === 'DM'} onChange={(e) => setNewReplyType(e.target.value)} className="w-5 h-5 focus:ring-pink-500" />
                                     <div>
                                         <span className="text-sm font-bold block text-foreground">✉️ シークレット（DM送信）</span>
-                                        <span className="text-xs text-muted-foreground block">相手にDMとして送信します。※相手のDMが受信可能に設定されている必要があります。</span>
+                                        <span className="text-xs text-muted-foreground block">相手にDMとして送信します。※DM送信には、X連携アカウントの<span className="font-bold text-red-600">再連携(/relink)でDM権限の許可</span>が必要です（既存の連携アカウントは一度再連携してください）。相手のDMが受信可能に設定されている必要があります。</span>
                                     </div>
                                 </label>
                             </div>

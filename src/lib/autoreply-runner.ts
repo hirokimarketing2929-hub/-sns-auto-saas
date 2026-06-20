@@ -306,9 +306,10 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                 const err = replyError as { message?: string; data?: { detail?: string; title?: string } };
                 let detail = err?.data?.detail || err?.data?.title || err?.message || "Unknown error";
                 const delivery = campaign.replyType === "DM" ? "DM" : "MENTION";
-                // DM が権限エラーで落ちた場合の原因ヒント（OAuth連携は dm.write を外しているため）。
+                // DM が権限エラーで落ちた場合の原因ヒント。
+                // 既存の連携トークンに dm.write が無い場合は再連携で解消する。
                 if (delivery === "DM" && /403|permission|not allowed|oauth|scope|dm\.write/i.test(detail)) {
-                    detail += "（OAuth連携アカウントではDM送信不可: dm.write 権限なし。DMはBYOK(自前APIキー)アカウントでのみ利用できます。メンション方式への変更を推奨）";
+                    detail += "（DM権限が不足しています。アカウントを再連携(/relink)してDM権限(dm.write)を許可してください。または DM権限付きのBYOK(自前APIキー)をご利用ください）";
                 }
                 console.error(`Failed to send reply to ${targetUser.userId}:`, replyError);
                 runLogs.push(`❌ Failed reply to ${targetUser.userId} (@${targetUser.username}) via ${delivery}: ${detail}`);

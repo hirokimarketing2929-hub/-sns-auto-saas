@@ -39,10 +39,11 @@ export const authOptions: NextAuthOptions = {
                 params: {
                     // users.read / tweet.read / tweet.write: 投稿系
                     // like.read: 自動リプライの「いいね検出」(liking_users)に必須
+                    // dm.write: 自動リプライのDM送信に必須（Xアプリ権限=Read and write and Direct message が前提）。
+                    //   以前 dm.* で同意画面が真っ白になったが、主因は上の twitter.com→x.com ドメイン上書きで解消済み。
+                    //   dm.read は送信に不要なので付与しない。
                     // offline.access: refresh_token 取得
-                    // ※ dm.read / dm.write は接続成立を優先して一旦除外（DM自動送信は BYOK で対応可）。
-                    //   x.com 化で同意画面が出ることを確認後、必要なら段階的に戻す。
-                    scope: "users.read tweet.read tweet.write like.read offline.access",
+                    scope: "users.read tweet.read tweet.write like.read dm.write offline.access",
                 },
             },
             allowDangerousEmailAccountLinking: true,
