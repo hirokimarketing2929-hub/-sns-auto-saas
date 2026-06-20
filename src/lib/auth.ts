@@ -35,11 +35,12 @@ export const authOptions: NextAuthOptions = {
             authorization: {
                 params: {
                     // users.read / tweet.read / tweet.write: 投稿系
+                    // like.read: 自動リプライの「いいね検出」(liking_users)に必須
                     // dm.read / dm.write: 自動DM機能用
                     // offline.access: refresh_token 取得
                     // ※ X Developer Portal の User authentication settings で
                     //   "Read and write and Direct message" を有効化している必要あり
-                    scope: "users.read tweet.read tweet.write dm.read dm.write offline.access",
+                    scope: "users.read tweet.read tweet.write like.read dm.read dm.write offline.access",
                 },
             },
             allowDangerousEmailAccountLinking: true,
