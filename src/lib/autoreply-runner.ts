@@ -41,6 +41,23 @@ function buildReplyText(variants: string[], index: number, replyContent: string)
 }
 
 /**
+ * tweetLikedBy / tweetRetweetedBy のユーザー配列を取り出す。
+ * twitter-api-v2 では asPaginator 無し呼び出しは素オブジェクト {data: UserV2[], meta} を返すため
+ * 配列は result.data。一方ページネータ形だと {data: {data: [...]}} になる。両方に耐えるよう取り出す。
+ */
+function extractUserArray(result: unknown): Array<{ id: string; username?: string }> {
+    const r = result as { data?: unknown };
+    if (Array.isArray(r?.data)) {
+        return r.data as Array<{ id: string; username?: string }>;
+    }
+    const nested = (r?.data as { data?: unknown })?.data;
+    if (Array.isArray(nested)) {
+        return nested as Array<{ id: string; username?: string }>;
+    }
+    return [];
+}
+
+/**
  * 渡された稼働中キャンペーン群を順に処理し、各種トリガー（いいね/RT/キーワードリプ）に
  * 該当した未送信ユーザーへ自動リプライ（REPLY/MENTION/DM）を送る。
  * 実行ログ（人が読める文字列の配列）を返す。cron / 手動実行(run_now) の両方から呼ぶ。
@@ -119,8 +136,9 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                     "user.fields": ["username", "name"],
                 });
                 await logXApiUsage({ userId: campaign.userId, operation: "x-tweet-liked-by", rateLimit: pickRateLimit(likedUsers) });
-                // paginator の .data は生ペイロード {data:[...], meta} を返すため、配列は .data.data。
-                const liked = (likedUsers as unknown as { data?: { data?: Array<{ id: string; username?: string }> } }).data?.data || [];
+                // tweetLikedBy(asPaginator無し) は素オブジェクト {data:UserV2[], meta} を返すので配列は .data。
+                // 念のためページネータ形({data:{data:[...]}})にも耐えるよう両対応で取り出す。
+                const liked = extractUserArray(likedUsers);
                 runLogs.push(`Liked users found: ${liked.length}`);
                 for (const u of liked) {
                     if (u.id && u.username) likeUsers.push({ userId: u.id, username: u.username });
@@ -134,8 +152,8 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                     "user.fields": ["username", "name"],
                 });
                 await logXApiUsage({ userId: campaign.userId, operation: "x-tweet-retweeted-by", rateLimit: pickRateLimit(retweetedUsers) });
-                // paginator の .data は生ペイロード {data:[...], meta} を返すため、配列は .data.data。
-                const rters = (retweetedUsers as unknown as { data?: { data?: Array<{ id: string; username?: string }> } }).data?.data || [];
+                // tweetRetweetedBy も同様に素オブジェクト {data:UserV2[], meta} を返すので .data が配列。
+                const rters = extractUserArray(retweetedUsers);
                 runLogs.push(`Retweeted users found: ${rters.length}`);
                 for (const u of rters) {
                     if (u.id && u.username) rtUsers.push({ userId: u.id, username: u.username });
