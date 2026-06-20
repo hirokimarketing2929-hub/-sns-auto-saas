@@ -398,6 +398,41 @@ export default async function DashboardPage() {
                         </div>
                     </div>
                 )}
+
+                {/* X API 従量課金（Pay-Per-Use）の料金目安 */}
+                <div className="mt-4 glass rounded-2xl p-5 border border-amber-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                        <Coins className="size-4 text-amber-400" />
+                        <span className="text-sm font-bold text-amber-300">X API の料金について（従量課金 / Pay-Per-Use）</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                        X API は2026年から<span className="font-semibold text-foreground/80">従量課金（前払いクレジット制）</span>です。
+                        投稿予約・自動リプライ・分析などで X API を呼ぶたびに、X 側のクレジットが少しずつ消費されます。
+                        月額固定の Basic プランは新規受付を終了し、現在は使った分だけ支払う方式が標準です。
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="font-bold text-foreground/90">読み取り（いいね/RT取得・検索など）</div>
+                            <div className="text-emerald-300 font-bold mt-1">約 $0.001〜0.005 / 件</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">比較的安価</div>
+                        </div>
+                        <div className="p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="font-bold text-foreground/90">投稿・リプライ送信</div>
+                            <div className="text-amber-300 font-bold mt-1">約 $0.015 / 件</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">通常の投稿/返信</div>
+                        </div>
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                            <div className="font-bold text-foreground/90">リンクを含む投稿・リプライ</div>
+                            <div className="text-rose-300 font-bold mt-1">約 $0.20 / 件</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">⚠️ 通常の約13倍。CTAリンク付き自動リプライは要注意</div>
+                        </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+                        ※ 単価は目安です（X の最新レートは Developer Console で確認）。とくに<span className="font-semibold text-foreground/80">「いいねした人へCTAリンク付きで自動リプライ」</span>は
+                        〔送信人数 × 約$0.20〕の費用がかかるため、件数が多いと無視できない金額になります。事前に X の Developer Console で
+                        <span className="font-semibold text-foreground/80"> クレジット残高 </span>をご確認ください。
+                    </p>
+                </div>
             </div>
 
             {/* Action Steps */}
