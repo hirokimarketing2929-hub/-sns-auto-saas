@@ -310,6 +310,9 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
                 // 既存の連携トークンに dm.write が無い場合は再連携で解消する。
                 if (delivery === "DM" && /403|permission|not allowed|oauth|scope|dm\.write/i.test(detail)) {
                     detail += "（DM権限が不足しています。アカウントを再連携(/relink)してDM権限(dm.write)を許可してください。または DM権限付きのBYOK(自前APIキー)をご利用ください）";
+                } else if (delivery === "DM" && /forbidden/i.test(detail)) {
+                    // dm.write はあるが X 側が拒否＝多くは送信先のDM受信設定。
+                    detail += "（送信先がDMを開放していない／フォロー外の可能性があります。相手のDM受信設定をご確認ください）";
                 }
                 console.error(`Failed to send reply to ${targetUser.userId}:`, replyError);
                 runLogs.push(`❌ Failed reply to ${targetUser.userId} (@${targetUser.username}) via ${delivery}: ${detail}`);
