@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
 
 type Target = {
     id: string;
@@ -49,13 +50,17 @@ export default function ReplyEngagementPage() {
     const fetchTargets = async () => {
         try {
             const res = await fetch("/api/reply-engagement/targets");
-            if (res.ok) {
-                const data = await res.json();
-                setTargets(data.targets || []);
-                if (data.max) setMaxTargets(data.max);
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "ターゲット一覧の取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            setTargets(data.targets || []);
+            if (data.max) setMaxTargets(data.max);
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -63,12 +68,16 @@ export default function ReplyEngagementPage() {
         setSuggLoading(true);
         try {
             const res = await fetch("/api/reply-engagement/suggestions?limit=30");
-            if (res.ok) {
-                const data = await res.json();
-                setSuggestions(data.items || []);
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "リプ案履歴の取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            setSuggestions(data.items || []);
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setSuggLoading(false);
         }
@@ -121,9 +130,15 @@ export default function ReplyEngagementPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "toggle", payload: { id: t.id, isActive: !t.isActive } }),
             });
-            if (res.ok) fetchTargets();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "稼働状態の更新に失敗しました");
+                return;
+            }
+            fetchTargets();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -135,9 +150,16 @@ export default function ReplyEngagementPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "delete", payload: { id: t.id } }),
             });
-            if (res.ok) fetchTargets();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "削除に失敗しました");
+                return;
+            }
+            toast.success(`@${t.username} を削除しました`);
+            fetchTargets();
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -171,8 +193,10 @@ export default function ReplyEngagementPage() {
     const copyText = async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
+            toast.success("コピーしました");
         } catch (e) {
             console.error(e);
+            toast.error("コピーに失敗しました");
         }
     };
 

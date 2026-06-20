@@ -19,13 +19,17 @@ export default function MediaLibraryPage() {
         setLoading(true);
         try {
             const res = await fetch("/api/media", { cache: "no-store" });
-            if (res.ok) {
-                const data = await res.json();
-                setMediaItems(data.media || []);
-                setStorage(data.storage || null);
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "メディア一覧の取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            setMediaItems(data.media || []);
+            setStorage(data.storage || null);
         } catch (error) {
             console.error("Fetch media error:", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setLoading(false);
         }

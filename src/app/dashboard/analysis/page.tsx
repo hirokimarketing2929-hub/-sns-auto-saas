@@ -10,6 +10,7 @@ import {
     MessageCircle, MousePointerClick, Heart, Repeat2
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 type Summary = {
     range: { days: number; since: string; until: string };
@@ -91,11 +92,15 @@ export default function AnalysisPage() {
         setLoading(true);
         try {
             const res = await fetch(`/api/analysis/summary?days=${days}&groupBy=${groupBy}`);
-            if (res.ok) {
-                setSummary(await res.json());
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "分析データの取得に失敗しました");
+                return;
             }
+            setSummary(await res.json());
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setLoading(false);
         }
@@ -116,9 +121,15 @@ export default function AnalysisPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ days }),
             });
-            if (res.ok) setInsight(await res.json());
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "AI分析の実行に失敗しました");
+                return;
+            }
+            setInsight(await res.json());
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setInsightLoading(false);
         }
@@ -172,13 +183,16 @@ export default function AnalysisPage() {
                 }
                 setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
                 setEditingSuggestion(null);
+                toast.success("ナレッジに追加しました");
             } else {
+                const data = await res.json().catch(() => null);
                 setSuggestionStatus(prev => ({ ...prev, [index]: "pending" }));
-                alert("ナレッジ追加に失敗しました");
+                toast.error(data?.error || data?.message || "ナレッジ追加に失敗しました");
             }
         } catch (e) {
             console.error(e);
             setSuggestionStatus(prev => ({ ...prev, [index]: "pending" }));
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -188,7 +202,7 @@ export default function AnalysisPage() {
         const knowledgeId = approvedKnowledgeId[index];
         if (!knowledgeId) {
             // 何らかの理由で id 未取得のとき: 安全のため何もしない（ナレッジベース画面で削除を促す）
-            alert("この提案の Knowledge ID が記録されていないため、画面上での取り消しはできません。\n「ナレッジベース」画面から直接削除してください。");
+            toast.error("Knowledge ID が記録されていないため、画面上での取り消しはできません。「ナレッジベース」画面から直接削除してください。");
             return;
         }
         if (!confirm("このナレッジを削除して『未承認』に戻します。よろしいですか？")) return;
@@ -203,14 +217,16 @@ export default function AnalysisPage() {
                     delete next[index];
                     return next;
                 });
+                toast.success("ナレッジを取り消しました");
             } else {
+                const data = await res.json().catch(() => null);
                 setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
-                alert("取り消しに失敗しました。再度お試しください。");
+                toast.error(data?.error || data?.message || "取り消しに失敗しました");
             }
         } catch (e) {
             console.error("unapprove failed:", e);
             setSuggestionStatus(prev => ({ ...prev, [index]: "approved" }));
-            alert("取り消し中にエラーが発生しました。");
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -232,12 +248,13 @@ export default function AnalysisPage() {
                 }),
             });
             if (!res.ok) {
+                const data = await res.json().catch(() => null);
                 setSuggestionStatus(prev => {
                     const next = { ...prev };
                     delete next[index];
                     return next;
                 });
-                alert("却下の保存に失敗しました。再度お試しください。");
+                toast.error(data?.error || data?.message || "却下の保存に失敗しました");
             }
         } catch (e) {
             console.error("reject persistence failed:", e);
@@ -246,7 +263,7 @@ export default function AnalysisPage() {
                 delete next[index];
                 return next;
             });
-            alert("却下の保存中にエラーが発生しました。");
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -271,13 +288,15 @@ export default function AnalysisPage() {
                     unanalyzed: data.unanalyzedCount ?? 0,
                     total: (data.positiveCount ?? 0) + (data.negativeCount ?? 0) + (data.unanalyzedCount ?? 0),
                 });
+                toast.success("判定が完了しました");
                 await fetchSummary();
             } else {
                 const err = await res.json().catch(() => ({}));
-                alert(`❌ 判定失敗: ${err.message || res.status}`);
+                toast.error(`判定失敗: ${err.message || err.error || res.status}`);
             }
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setClassifying(false);
         }
@@ -288,14 +307,15 @@ export default function AnalysisPage() {
         try {
             const res = await fetch("/api/past-posts/sync", { method: "POST" });
             if (res.ok) {
-                alert("✅ 過去投稿を同期しました");
+                toast.success("過去投稿を同期しました");
                 await fetchSummary();
             } else {
                 const err = await res.json().catch(() => ({}));
-                alert(`❌ 同期失敗: ${err.message || res.status}`);
+                toast.error(`同期失敗: ${err.message || err.error || res.status}`);
             }
         } catch (e) {
             console.error(e);
+            toast.error(`通信エラー: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
             setSyncing(false);
         }

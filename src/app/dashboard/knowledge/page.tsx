@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 type KnowledgeRow = {
     id: string;
@@ -61,20 +62,24 @@ export default function KnowledgePage() {
         try {
             setLoadingAccount(true);
             const res = await fetch("/api/settings");
-            if (res.ok) {
-                const data = await res.json();
-                setAccountForm({
-                    targetAudience: data.targetAudience || "",
-                    targetPain: data.targetPain || "",
-                    ctaUrl: data.ctaUrl || "",
-                    accountConcept: data.accountConcept || "",
-                    profile: data.profile || "",
-                    applyPersonaToGeneration: !!data.applyPersonaToGeneration,
-                });
-                setAccountDirty(false); // 取得直後は未保存変更なし
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "アカウント設定の取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            setAccountForm({
+                targetAudience: data.targetAudience || "",
+                targetPain: data.targetPain || "",
+                ctaUrl: data.ctaUrl || "",
+                accountConcept: data.accountConcept || "",
+                profile: data.profile || "",
+                applyPersonaToGeneration: !!data.applyPersonaToGeneration,
+            });
+            setAccountDirty(false); // 取得直後は未保存変更なし
         } catch (error) {
             console.error("Failed to fetch account settings:", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setLoadingAccount(false);
         }
@@ -121,12 +126,14 @@ export default function KnowledgePage() {
             const res = await fetch(`/api/knowledge/${id}`, { method: "DELETE" });
             if (res.ok) {
                 setKnowledges(prev => prev.filter(k => k.id !== id));
+                toast.success("ナレッジを削除しました");
             } else {
-                alert("削除に失敗しました。");
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "削除に失敗しました");
             }
         } catch (error) {
             console.error("Delete knowledge error:", error);
-            alert("通信エラーが発生しました。");
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setOpenMenuId(null);
         }
@@ -181,13 +188,19 @@ export default function KnowledgePage() {
         if (!reordered) return;
 
         try {
-            await fetch("/api/knowledge/reorder", {
+            const res = await fetch("/api/knowledge/reorder", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ids: reordered }),
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "並び替えの保存に失敗しました");
+                fetchKnowledges();
+            }
         } catch (error) {
             console.error("Reorder error:", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
             // 失敗時は再取得して整合性を戻す
             fetchKnowledges();
         }
@@ -197,12 +210,16 @@ export default function KnowledgePage() {
         try {
             setLoading(true);
             const res = await fetch("/api/knowledge");
-            if (res.ok) {
-                const data = await res.json();
-                setKnowledges(data);
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "ナレッジの取得に失敗しました");
+                return;
             }
+            const data = await res.json();
+            setKnowledges(data);
         } catch (error) {
             console.error("Failed to fetch knowledges:", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setLoading(false);
         }
@@ -210,14 +227,21 @@ export default function KnowledgePage() {
 
     const handleSeedDemodata = async () => {
         try {
-            await fetch("/api/knowledge", {
+            const res = await fetch("/api/knowledge", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "seed" })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "デモデータの投入に失敗しました");
+                return;
+            }
+            toast.success("デモデータを投入しました");
             fetchKnowledges();
         } catch (error) {
             console.error("Seed error", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         }
     };
 
@@ -245,14 +269,14 @@ export default function KnowledgePage() {
             });
             if (res.ok) {
                 fetchKnowledges();
-                alert("ファイルの解析とナレッジの追加が完了しました！");
+                toast.success("ファイルの解析とナレッジの追加が完了しました");
             } else {
-                const errData = await res.json();
-                alert(`アップロードエラー: ${errData.message || "失敗しました"}`);
+                const errData = await res.json().catch(() => null);
+                toast.error(`アップロードエラー: ${errData?.message || errData?.error || "失敗しました"}`);
             }
         } catch (error) {
             console.error("Upload error:", error);
-            alert("通信エラーが発生しました。");
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsUploading(false);
             e.target.value = ""; // 選択リセット
@@ -274,12 +298,17 @@ export default function KnowledgePage() {
                     source: "ユーザー独自 (手動登録)"
                 })
             });
-            if (res.ok) {
-                setNewRule("");
-                fetchKnowledges();
+            if (!res.ok) {
+                const data = await res.json().catch(() => null);
+                toast.error(data?.error || data?.message || "ナレッジの追加に失敗しました");
+                return;
             }
+            toast.success("ナレッジを追加しました");
+            setNewRule("");
+            fetchKnowledges();
         } catch (error) {
             console.error("Failed to add manual rule:", error);
+            toast.error(`通信エラー: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsSubmitting(false);
         }
