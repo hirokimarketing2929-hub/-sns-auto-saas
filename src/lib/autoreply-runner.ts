@@ -74,12 +74,34 @@ export async function runAutoReplyForCampaigns(campaigns: any[], db: any): Promi
         }
 
         // 送信者自身の X user_id を取得（全 replyType 共通）。自分宛の送信を弾く。
+        // 併せて username をログに出し「どのアカウントとして実行しているか」を可視化する。
         let selfUserId: string | null = null;
         try {
-            const me = await twitterClient.v2.me();
+            const me = await twitterClient.v2.me({ "user.fields": ["username"] });
             selfUserId = me.data?.id || null;
+            const uname = (me.data as { username?: string })?.username;
+            runLogs.push(`🔑 連携アカウント: @${uname || "?"} (id ${selfUserId || "?"})`);
         } catch (meErr: any) {
-            runLogs.push(`Could not fetch sender identity (v2.me) for campaign ${campaign.name}: ${meErr.message || meErr}`);
+            runLogs.push(`⚠️ 連携アカウントの確認(v2.me)に失敗: ${meErr.message || meErr}`);
+        }
+
+        // いいねトリガー時の前提チェック（X 2024 のいいね非公開化対応）。
+        // liking_users は「認証アカウント自身の投稿」のいいねしか返さない。対象ポストの所有者が
+        // 連携アカウントと違うと、いいねが何件あっても 0 件で返るため、ここで明示警告する。
+        if (isTriggerLike && selfUserId) {
+            try {
+                const tw = await twitterClient.v2.singleTweet(targetPostId, { "tweet.fields": ["author_id"] });
+                const authorId = (tw.data as { author_id?: string })?.author_id;
+                if (authorId && authorId !== selfUserId) {
+                    runLogs.push(
+                        `⚠️ いいね検出はX仕様(2024〜いいね非公開)により『連携アカウント自身の投稿』しか取得できません。` +
+                        `対象ポストの所有者(id ${authorId})と連携アカウント(id ${selfUserId})が一致していません。` +
+                        `→ 対象投稿の本人アカウントでProXに連携してください。`
+                    );
+                }
+            } catch (twErr: any) {
+                runLogs.push(`（対象ポストの所有者確認に失敗: ${twErr.message || twErr}）`);
+            }
         }
 
         // 各トリガーに該当したユーザー集合を個別に収集
