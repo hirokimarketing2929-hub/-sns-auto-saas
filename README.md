@@ -111,3 +111,17 @@ DATABASE_URL="<本番>" node scripts-migrate-x-account-persona.mjs
 
 制約: GitHub Actions のスケジュールは最短5分・ベストエフォート（高負荷時遅延・リポジトリ60日無活動で自動停止）。
 分単位の正確さが必要なら [cron-job.org](https://cron-job.org)（1分・無料）等で同じ3つのURLを Bearer 付きで叩いてもよい。
+
+#### 1分間隔（cron-job.org）— 精密運用（推奨構成: 1分=cron-job.org / 5分=GitHub Actions 併存）
+cron エンドポイントは冪等（`AutoReplyLog` / `status` / `isImpressionReplySent` で二重送信を防止）なので、
+cron-job.org(1分) と GitHub Actions(5分) を**両方動かしても二重送信は起きない**（5分側は保険）。
+
+手順（**先に上の GitHub Actions「Run workflow」で各 `-> 200` を確認してから**実施するのが確実。
+cron-job.org も同じ `CRON_SECRET`/URL を使うため）:
+1. [cron-job.org](https://cron-job.org) に無料登録。
+2. 下記3つの **Cronjob を作成**（いずれも **Method: GET**, **実行間隔: every 1 minute**）：
+   - `https://<本番>/api/cron/publish`
+   - `https://<本番>/api/cron/autoreply`
+   - `https://<本番>/api/cron/check-impressions`
+3. 各ジョブの **Headers** に `Authorization: Bearer <CRON_SECRET>`（Vercel env と同値）を追加。
+4. 数分後、各ジョブの実行履歴が **200**、予約投稿/自動リプライが1分精度で動くことを確認。
