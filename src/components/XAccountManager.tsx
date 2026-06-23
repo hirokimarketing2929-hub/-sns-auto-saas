@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ export default function XAccountManager() {
     const [activeId, setActiveId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
+    const [connecting, setConnecting] = useState(false);
     const [notice, setNotice] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
     // 新規作成フォーム state
@@ -39,6 +41,26 @@ export default function XAccountManager() {
     useEffect(() => {
         load();
     }, []);
+
+    // OAuth 連携から戻ってきたとき（auth.ts が ?linked=1 / ?error=... を付けて settings に戻す）
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("linked") === "1") {
+            setNotice({ type: "success", text: "X アカウントを連携しました（このアカウントに切替済み）" });
+            setTimeout(() => setNotice(null), 4000);
+        } else if (params.get("error") === "account_in_use") {
+            setNotice({ type: "error", text: "この X アカウントは既に別のユーザーに連携されています" });
+            setTimeout(() => setNotice(null), 4000);
+        }
+    }, []);
+
+    // X OAuth でワンクリック連携。完了後、auth.ts 側で XAccount を自動作成して active に切替え、
+    // /dashboard/settings?linked=1#x-accounts に戻る。APIキーの手入力が不要になる。
+    function connectOAuth() {
+        setConnecting(true);
+        signIn("twitter", { callbackUrl: "/dashboard/settings?linked=1#x-accounts" });
+    }
 
     async function load() {
         setLoading(true);
@@ -178,8 +200,19 @@ export default function XAccountManager() {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <Button type="button" onClick={() => setCreating(v => !v)} disabled={busy}>
-                        {creating ? "キャンセル" : "+ アカウント追加"}
+                    <Button
+                        type="button"
+                        onClick={connectOAuth}
+                        disabled={busy || connecting}
+                        className="bg-black text-white hover:bg-gray-800 gap-2"
+                    >
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                        {connecting ? "連携画面へ移動中…" : "X でワンクリック連携"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setCreating(v => !v)} disabled={busy || connecting}>
+                        {creating ? "キャンセル" : "+ 手動で追加"}
                     </Button>
                 </div>
             </div>
@@ -192,6 +225,12 @@ export default function XAccountManager() {
 
             {creating && (
                 <div className="border rounded-lg p-4 bg-slate-50 space-y-4">
+                    <div className="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded p-2 flex items-center justify-between gap-3 flex-wrap">
+                        <span>💡 API キーの取得が不要な「<strong>X でワンクリック連携</strong>」が簡単です。手動で API キーを入れたい場合のみ下のフォームを使ってください。</span>
+                        <Button type="button" size="sm" onClick={connectOAuth} disabled={busy || connecting} className="bg-black text-white hover:bg-gray-800">
+                            {connecting ? "移動中…" : "ワンクリック連携"}
+                        </Button>
+                    </div>
                     <div>
                         <Label htmlFor="newName">管理名 <span className="text-red-500">*</span></Label>
                         <Input

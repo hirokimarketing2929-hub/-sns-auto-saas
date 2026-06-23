@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import LogoutButton from "./LogoutButton";
 import AccountSwitcher from "@/components/AccountSwitcher";
 import OnboardingPopup from "@/components/OnboardingPopup";
+import { isFeatureEnabled } from "@/lib/features";
 import Link from "next/link";
 import {
     LayoutDashboard,
@@ -145,29 +146,37 @@ export default async function DashboardLayout({
                                 <MessageCircle className="size-4" />
                                 <span>自動リプライ設定</span>
                             </Link>
-                            <Link href="/dashboard/reply-engagement" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
-                                <Sparkles className="size-4" />
-                                <span>リプ周り半自動化</span>
-                            </Link>
+                            {isFeatureEnabled("replyEngagement") && (
+                                <Link href="/dashboard/reply-engagement" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                    <Sparkles className="size-4" />
+                                    <span>リプ周り半自動化</span>
+                                </Link>
+                            )}
                         </div>
                     </div>
 
-                    {/* Step 4 */}
-                    <div>
-                        <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
-                            STEP 4: 分析 & 改善
-                        </p>
-                        <div className="space-y-0.5">
-                            <Link href="/dashboard/analysis" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
-                                <BarChart3 className="size-4" />
-                                <span>データ分析</span>
-                            </Link>
-                            <Link href="/dashboard/kpi" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
-                                <Scale className="size-4" />
-                                <span>KPI 目標</span>
-                            </Link>
+                    {/* Step 4 — 本番(mvp)では非表示 */}
+                    {(isFeatureEnabled("analysis") || isFeatureEnabled("kpi")) && (
+                        <div>
+                            <p className="text-xs font-bold text-white/90 uppercase tracking-wider mb-2 px-3 py-2 bg-white/[0.06] rounded-md">
+                                STEP 4: 分析 & 改善
+                            </p>
+                            <div className="space-y-0.5">
+                                {isFeatureEnabled("analysis") && (
+                                    <Link href="/dashboard/analysis" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                        <BarChart3 className="size-4" />
+                                        <span>データ分析</span>
+                                    </Link>
+                                )}
+                                {isFeatureEnabled("kpi") && (
+                                    <Link href="/dashboard/kpi" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                        <Scale className="size-4" />
+                                        <span>KPI 目標</span>
+                                    </Link>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Other */}
                     <div>
@@ -175,10 +184,12 @@ export default async function DashboardLayout({
                             その他
                         </p>
                         <div className="space-y-0.5">
-                            <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
-                                <ImageIcon className="size-4" />
-                                <span>メディアライブラリ</span>
-                            </Link>
+                            {isFeatureEnabled("media") && (
+                                <Link href="/dashboard/media" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
+                                    <ImageIcon className="size-4" />
+                                    <span>メディアライブラリ</span>
+                                </Link>
+                            )}
                             <Link href="/dashboard/help" className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-foreground/70 bg-white/[0.02] hover:text-foreground hover:bg-white/10 transition-all">
                                 <HelpCircle className="size-4" />
                                 <span>Q&A・使い方</span>

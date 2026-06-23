@@ -9,7 +9,10 @@
     "lint": "eslint",
     "db:deploy": "prisma migrate deploy",
     "db:baseline": "prisma migrate resolve --applied 20260618120904_init",
-    "db:status": "prisma migrate status"
+    "db:status": "prisma migrate status",
+    "dev:prod": "node scripts/with-env.mjs .env.prod.local next dev -p 3001",
+    "db:start": "LC_ALL=C LANG=C /usr/local/opt/postgresql@18/bin/pg_ctl -D /usr/local/var/postgresql@18 -l /usr/local/var/postgresql@18/server.log start",
+    "db:stop": "/usr/local/opt/postgresql@18/bin/pg_ctl -D /usr/local/var/postgresql@18 stop"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",

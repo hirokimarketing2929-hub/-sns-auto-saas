@@ -3,12 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 
 export async function GET(req: Request) {
-    // 簡易的な認証（実運用では VERCEL_CRON_SECRET などを検証）
+    // cron 認証: CRON_SECRET の Bearer トークンを必須化する。
+    // （旧実装は User-Agent に "cron" を含むだけで通過＝なりすまし可能だった。CTO監査 3c で修正）
+    // Vercel Cron / GitHub Actions / cron-job.org いずれも Authorization: Bearer <CRON_SECRET> を送る。
     const authHeader = req.headers.get("authorization");
-    const isCron = req.headers.get("user-agent")?.includes("cron") || 
-                   (authHeader === `Bearer ${process.env.CRON_SECRET}`);
-
-    if (process.env.NODE_ENV === "production" && !isCron) {
+    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 

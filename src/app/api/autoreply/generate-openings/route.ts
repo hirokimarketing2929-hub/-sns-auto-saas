@@ -3,6 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
+import { errorResponse } from "@/lib/api-error";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { resolveAIProvider } from "@/lib/ai-provider";
 
 // 自動リプライキャンペーン用「冒頭バリエーション」量産エンドポイント。
 // 同一テンプレを大量送信すると不自然＆スパム判定リスクが上がるため、
@@ -119,6 +122,10 @@ function stripUrls(text: string): string {
 
 export async function POST(req: Request) {
     try {
+        // LLM 課金が走る（最大100件生成）ため濫用ガード。
+        const limited = enforceRateLimit(`gen-openings:${getClientIp(req)}`, 10, 60_000);
+        if (limited) return limited;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -137,14 +144,12 @@ export async function POST(req: Request) {
         }
 
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
-        let provider: Provider | null = null;
-        if (settings?.anthropicApiKey?.trim()) {
-            provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
-        } else if (settings?.openaiApiKey?.trim()) {
-            provider = { name: "openai", apiKey: settings.openaiApiKey.trim(), model: OPENAI_MODEL };
-        } else if (process.env.ANTHROPIC_API_KEY) {
-            provider = { name: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL };
-        }
+        const provider: Provider | null = resolveAIProvider({
+            anthropicApiKey: settings?.anthropicApiKey,
+            openaiApiKey: settings?.openaiApiKey,
+            anthropicModel: ANTHROPIC_MODEL,
+            openaiModel: OPENAI_MODEL,
+        });
         if (!provider) {
             return NextResponse.json({
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
@@ -196,7 +201,8 @@ export async function POST(req: Request) {
                 success: false,
                 errorMessage: msg,
             });
-            return NextResponse.json({ error: `AI 呼び出しに失敗しました: ${msg}` }, { status: 502 });
+            console.error("[generate-openings] LLM call failed:", msg);
+            return NextResponse.json({ error: "AI 呼び出しに失敗しました。時間をおいて再試行してください。" }, { status: 502 });
         }
 
         await logLlmUsage({
@@ -231,8 +237,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ openings, count: openings.length });
     } catch (error) {
-        console.error("generate-openings error:", error);
-        const msg = error instanceof Error ? error.message : String(error);
-        return NextResponse.json({ error: msg }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "generate-openings");
     }
 }

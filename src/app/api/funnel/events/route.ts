@@ -25,6 +25,11 @@ export async function GET(req: Request) {
     const since = new Date();
     since.setDate(since.getDate() - days);
 
+    // 「連携数」(totalCount/daily) は真の連携イベントのみを数える。
+    // prox_onboarding（オンボーディング・ポップアップのクリック＝連携ファネルへの入口）は
+    // 登録ではないため登録系カウントから除外し、入口は byUtmCampaign で別途可視化する。
+    const registrationOnly = { source: { not: "prox_onboarding" } } as const;
+
     const [recent, totalCount, byForm, byScenario, byUtmCampaign] = await Promise.all([
         prisma.funnelEvent.findMany({
             where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
@@ -44,7 +49,7 @@ export async function GET(req: Request) {
             },
         }),
         prisma.funnelEvent.count({
-            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since }, ...registrationOnly },
         }),
         // フォーム送信のフォーム名別（source が proline_form もしくは従来の proline）
         prisma.funnelEvent.groupBy({
@@ -78,7 +83,7 @@ export async function GET(req: Request) {
     // 日別集計（タイムゾーンは JST 相当で日付境界を処理 — クライアント側でも微調整）
     const daily: Record<string, number> = {};
     const allInRange = await prisma.funnelEvent.findMany({
-        where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
+        where: { userId: user.id, xAccountId, occurredAt: { gte: since }, ...registrationOnly },
         select: { occurredAt: true },
     });
     for (const ev of allInRange) {

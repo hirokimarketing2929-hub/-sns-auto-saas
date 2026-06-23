@@ -2,16 +2,28 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { sendToOwnerSheet } from "@/lib/owner-sheets";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { checkInviteCode } from "@/lib/beta-gate";
 
 export async function POST(req: Request) {
     try {
-        const { email, password, name } = await req.json();
+        // アカウント作成の濫用（大量登録）対策（IP単位）。
+        const limited = enforceRateLimit(`register:${getClientIp(req)}`, 5, 60_000);
+        if (limited) return limited;
+
+        const { email, password, name, inviteCode } = await req.json();
 
         if (!email || !password) {
             return NextResponse.json(
                 { message: "メールアドレスとパスワードは必須です" },
                 { status: 400 }
             );
+        }
+
+        // クローズドβ招待制ゲート（B-4）。mvp では有効な招待コードが無いと登録不可。
+        const invite = checkInviteCode(inviteCode);
+        if (!invite.ok) {
+            return NextResponse.json({ message: invite.message }, { status: 403 });
         }
 
         const existingUser = await prisma.user.findUnique({

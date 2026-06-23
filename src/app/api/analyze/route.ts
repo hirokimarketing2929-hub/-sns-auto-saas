@@ -4,8 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
 import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
+import { errorResponse } from "@/lib/api-error";
+import { featureGateResponse } from "@/lib/features";
 
 export async function POST(req: Request) {
+    // Python AIエンジン依存機能。mvp(外部公開)では縮退して提供しない（CTO決定003 §3）。
+    const gated = featureGateResponse("pythonAI");
+    if (gated) return gated;
+
     const session = await getServerSession(authOptions);
 
     if (!session || !session.user || !session.user.email) {
@@ -75,10 +81,10 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         if (error instanceof EngineUnavailableError) {
+            // EngineUnavailableError は内部情報を含まない縮退メッセージなのでそのまま返してよい。
             console.warn("Analyze: AI engine unavailable:", error.message);
-            return NextResponse.json({ message: error.message }, { status: 503 });
+            return NextResponse.json({ message: "この機能は現在利用できません。しばらくしてから再試行してください。" }, { status: 503 });
         }
-        console.error("Analyze POST error:", error);
-        return NextResponse.json({ message: error.message || "サーバーエラー" }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "analyze.post");
     }
 }

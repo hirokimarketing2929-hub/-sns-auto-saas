@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { suggestionHash } from "@/lib/analysis-hash";
 import { getActiveXAccountId } from "@/lib/active-x-account";
+import { resolveAIProvider } from "@/lib/ai-provider";
 
 // Claude / OpenAI を使って「直近 N 日のパフォーマンス」を自然言語で要約・助言する。
 // 出力は JSON: { headline, what_worked, what_didnt, next_moves: string[], tldr }
@@ -100,14 +101,12 @@ export async function POST(req: Request) {
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
         if (!settings) return NextResponse.json({ error: "設定情報が見つかりません" }, { status: 400 });
 
-        let provider: Provider | null = null;
-        if (settings.anthropicApiKey?.trim()) {
-            provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
-        } else if (settings.openaiApiKey?.trim()) {
-            provider = { name: "openai", apiKey: settings.openaiApiKey.trim(), model: OPENAI_MODEL };
-        } else if (process.env.ANTHROPIC_API_KEY) {
-            provider = { name: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL };
-        }
+        const provider: Provider | null = resolveAIProvider({
+            anthropicApiKey: settings.anthropicApiKey,
+            openaiApiKey: settings.openaiApiKey,
+            anthropicModel: ANTHROPIC_MODEL,
+            openaiModel: OPENAI_MODEL,
+        });
         if (!provider) {
             return NextResponse.json({
                 headline: "AI プロバイダの API キー未設定",
@@ -129,7 +128,9 @@ export async function POST(req: Request) {
                 take: 20,
             }),
             prisma.funnelEvent.findMany({
-                where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
+                // 「プロライン登録」としてAIに渡すのは真の連携イベントのみ。
+                // prox_onboarding（ポップアップのクリック＝入口）は登録ではないため除外する。
+                where: { userId: user.id, xAccountId, occurredAt: { gte: since }, source: { not: "prox_onboarding" } },
                 select: { occurredAt: true, formName: true, utmCampaign: true, utmContent: true },
             }),
             prisma.knowledge.findMany({

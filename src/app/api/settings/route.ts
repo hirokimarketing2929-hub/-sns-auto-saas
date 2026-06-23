@@ -4,6 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { TwitterApi } from "twitter-api-v2";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { errorResponse } from "@/lib/api-error";
+
+// Settings に保存される機微フィールド（at-rest 暗号化対象）。
+const SECRET_SETTINGS_FIELDS = [
+    "xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret",
+    "anthropicApiKey", "openaiApiKey", "chatworkApiToken",
+] as const;
 
 // アカウント別に持つフィールド（アクティブな XAccount に読み書きする）。
 // これらを Settings ではなく XAccount に保存することで、投稿生成（generate / structure-rewrite）が
@@ -64,10 +72,15 @@ export async function GET() {
             hasTwitterOAuth,
             twitterAccounts,
         };
+        // 機微フィールドは復号して本人に返す（フロントの「保存済みキー表示」用）。
+        for (const f of SECRET_SETTINGS_FIELDS) {
+            if (typeof (responseData as any)[f] === "string") {
+                (responseData as any)[f] = decryptSecret((responseData as any)[f]);
+            }
+        }
         return NextResponse.json(responseData);
     } catch (error) {
-        console.error("Settings GET error:", error);
-        return NextResponse.json({ message: "サーバーエラー" }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "settings.get");
     }
 }
 
@@ -146,15 +159,27 @@ export async function PUT(req: Request) {
         if (xAccountName !== undefined) updateFields.xAccountName = xAccountName;
         if (xProfileImageUrl !== undefined) updateFields.xProfileImageUrl = xProfileImageUrl;
 
+        // 保存前に機微フィールドを暗号化（送信されたものだけ）。
+        for (const f of SECRET_SETTINGS_FIELDS) {
+            if (typeof updateFields[f] === "string") {
+                updateFields[f] = encryptSecret(updateFields[f] as string);
+            }
+        }
+
         const updatedSettings = await prisma.settings.upsert({
             where: { userId: user.id },
             update: updateFields,
             create: { userId: user.id, ...updateFields }
         });
 
-        return NextResponse.json(updatedSettings);
+        const responseSettings: any = { ...updatedSettings };
+        for (const f of SECRET_SETTINGS_FIELDS) {
+            if (typeof responseSettings[f] === "string") {
+                responseSettings[f] = decryptSecret(responseSettings[f]);
+            }
+        }
+        return NextResponse.json(responseSettings);
     } catch (error) {
-        console.error("Settings PUT error:", error);
-        return NextResponse.json({ message: "サーバーエラー" }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "settings.put");
     }
 }

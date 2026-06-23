@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 // プロラインフリーからの form_data を受け取る webhook 受信エンドポイント。
 // 想定: ユーザーの GAS が doPost 内で本エンドポイントに JSON を転送してくる。
@@ -25,6 +26,10 @@ export async function POST(
     context: { params: Promise<{ token: string }> }
 ) {
     try {
+        // 受信濫用・トークン総当たり対策（IP単位）。正規の GAS 転送は十分この枠内に収まる。
+        const limited = enforceRateLimit(`funnel-webhook:${getClientIp(req)}`, 60, 60_000);
+        if (limited) return limited;
+
         const { token } = await context.params;
         if (!token || token.length < 16) {
             return NextResponse.json({ error: "Invalid token" }, { status: 401 });

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { writeFile } from "fs/promises";
 import { join } from "path";
 import { v4 as uuidv4 } from "uuid";
+import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
 
@@ -79,13 +80,11 @@ export async function POST(req: Request) {
                 })
             ]);
         } catch (dbError) {
-            console.error("DB update error after media upload:", dbError);
-            return NextResponse.json({ message: "DBへの登録中にエラーが発生しました。", details: String(dbError) }, { status: 500 });
+            return errorResponse(dbError, "DBへの登録中にエラーが発生しました。", 500, "upload.db");
         }
 
         return NextResponse.json({ success: true, url, filename: originalName, size: fileSize });
     } catch (error) {
-        console.error("Upload error:", error);
-        return NextResponse.json({ message: "アップロード中にエラーが発生しました", details: String(error) }, { status: 500 });
+        return errorResponse(error, "アップロード中にエラーが発生しました", 500, "upload.post");
     }
 }

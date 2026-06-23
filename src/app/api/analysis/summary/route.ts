@@ -134,16 +134,21 @@ export async function GET(req: Request) {
         .map(([date, v]) => ({ date, ...v }));
 
     // --- Funnel（プロライン） ---
+    // 「連携/登録」カウントは真の連携イベント（ProLine 側の登録）のみを数える。
+    // prox_onboarding（オンボーディング・ポップアップのクリック＝連携ファネルへの"入口"）は
+    // 登録ではないため、登録系の集計からは除外する（取りこぼし防止ではなく二重計上の解消）。
+    // 入口クリックは byUtmCampaign（prox_onboarding_popup）でのみ可視化する。
+    const REGISTRATION_SOURCE_FILTER = { not: "prox_onboarding" } as const;
     const [funnelToday, funnelMonth, funnelInRange, funnelByForm, funnelByUtm] = await Promise.all([
-        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfToday } } }),
-        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfMonth } } }),
+        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfToday }, source: REGISTRATION_SOURCE_FILTER } }),
+        prisma.funnelEvent.count({ where: { userId: user.id, xAccountId, occurredAt: { gte: startOfMonth }, source: REGISTRATION_SOURCE_FILTER } }),
         prisma.funnelEvent.findMany({
-            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since }, source: REGISTRATION_SOURCE_FILTER },
             select: { occurredAt: true, utmCampaign: true, utmContent: true, formName: true },
         }),
         prisma.funnelEvent.groupBy({
             by: ["formName"],
-            where: { userId: user.id, xAccountId, occurredAt: { gte: since } },
+            where: { userId: user.id, xAccountId, occurredAt: { gte: since }, source: REGISTRATION_SOURCE_FILTER },
             _count: { _all: true },
         }),
         prisma.funnelEvent.groupBy({

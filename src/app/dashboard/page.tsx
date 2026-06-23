@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/features";
 import Link from "next/link";
 import {
     Brain,
@@ -524,7 +525,8 @@ export default async function DashboardPage() {
                         </span>
                     </Link>
 
-                    {/* Step 4 */}
+                    {/* Step 4 — 本番(mvp)では非表示 */}
+                    {(isFeatureEnabled("kpi") || isFeatureEnabled("analysis")) && (
                     <Link href="/dashboard/kpi" className="group glass rounded-2xl p-6 transition-all duration-300 hover:bg-white/8">
                         <div className="flex items-center justify-between mb-3">
                             <span className="px-2.5 py-1 text-[10px] font-bold tracking-widest uppercase rounded-full bg-white/5 text-muted-foreground">
@@ -538,6 +540,7 @@ export default async function DashboardPage() {
                             データ分析画面へ <ArrowRight className="size-3" />
                         </span>
                     </Link>
+                    )}
                 </div>
             </div>
         </div>

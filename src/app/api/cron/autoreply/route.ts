@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { runAutoReplyForCampaigns } from "@/lib/autoreply-runner";
 
@@ -69,11 +70,6 @@ export async function GET(req: Request) {
         });
 
     } catch (error: any) {
-        console.error("Cron AutoReply error:", error);
-        return NextResponse.json({
-            message: "Server error during cron execution",
-            error: error.message,
-            stack: error.stack
-        }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "cron.autoreply");
     }
 }

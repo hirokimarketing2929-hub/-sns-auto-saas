@@ -4,6 +4,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { TwitterApi } from "twitter-api-v2";
 import { logXApiUsage } from "@/lib/api-usage";
+import { decryptSecret } from "@/lib/crypto";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 // 入力は @username もしくは X (Twitter) のポスト URL のいずれか。
 //   - URL の場合: `/status/<id>` を抽出して該当ポストを単体取得
@@ -16,6 +18,10 @@ import { logXApiUsage } from "@/lib/api-usage";
 //   - 本 API は「取得 + 公開メトリクス参照」のみ。AI 学習・再配布には使わない前提
 export async function POST(req: Request) {
     try {
+        // 外部 X API を叩く（コスト・レート消費あり）ため濫用ガード。
+        const limited = enforceRateLimit(`research-fetch:${getClientIp(req)}`, 30, 60_000);
+        if (limited) return limited;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -44,10 +50,10 @@ export async function POST(req: Request) {
         }
 
         const client = new TwitterApi({
-            appKey: settings.xApiKey,
-            appSecret: settings.xApiSecret,
-            accessToken: settings.xAccessToken,
-            accessSecret: settings.xAccessSecret,
+            appKey: decryptSecret(settings.xApiKey) as string,
+            appSecret: decryptSecret(settings.xApiSecret) as string,
+            accessToken: decryptSecret(settings.xAccessToken) as string,
+            accessSecret: decryptSecret(settings.xAccessSecret) as string,
         });
 
         // 入力判定：URL 優先（/status/<数字> を含めば URL とみなす）

@@ -60,3 +60,6 @@ __pycache__/
 next-env.d.ts
 
 /src/generated/prisma
+
+# 本番ミラー(dev:prod)用ビルドディレクトリ
+.next-prod

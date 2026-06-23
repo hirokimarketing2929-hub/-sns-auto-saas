@@ -4,9 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
 import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
+import { featureGateResponse } from "@/lib/features";
 
 export async function POST(req: Request) {
     try {
+        // Python AIエンジン依存機能。mvp(外部公開)では縮退して提供しない（CTO決定003 §3）。
+        const gated = featureGateResponse("pythonAI");
+        if (gated) return gated;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 
@@ -121,7 +122,6 @@ export async function GET(req: Request) {
         });
 
     } catch (error: any) {
-        console.error("Publish cron job error:", error);
-        return NextResponse.json({ message: "サーバーエラー", error: error.message }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "cron.publish");
     }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { TwitterApi } from "twitter-api-v2";
@@ -159,10 +160,6 @@ export async function GET(req: Request) {
         });
 
     } catch (error: any) {
-        console.error("Cron Impression check error:", error);
-        return NextResponse.json({
-            message: "Server error during impression check cron execution",
-            error: error.message
-        }, { status: 500 });
+        return errorResponse(error, "サーバーエラーが発生しました", 500, "cron.check-impressions");
     }
 }

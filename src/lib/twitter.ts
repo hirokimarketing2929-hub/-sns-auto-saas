@@ -1,6 +1,7 @@
 import { TwitterApi } from "twitter-api-v2";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccount } from "@/lib/active-x-account";
+import { decryptSecret, encryptSecret } from "@/lib/crypto";
 
 /**
  * 指定ユーザーの「アクティブな」サブアカウントに紐づく TwitterApi クライアントを返す。
@@ -30,24 +31,26 @@ export async function getTwitterClient(userId: string, xAccountId?: string): Pro
         xAccount.xAccessSecret
     ) {
         return new TwitterApi({
-            appKey: xAccount.xApiKey,
-            appSecret: xAccount.xApiSecret,
-            accessToken: xAccount.xAccessToken,
-            accessSecret: xAccount.xAccessSecret,
+            appKey: decryptSecret(xAccount.xApiKey) as string,
+            appSecret: decryptSecret(xAccount.xApiSecret) as string,
+            accessToken: decryptSecret(xAccount.xAccessToken) as string,
+            accessSecret: decryptSecret(xAccount.xAccessSecret) as string,
         });
     }
 
-    // 2. OAuth トークン
+    // 2. OAuth トークン（at-rest 暗号化済み → 使用直前に復号）
     const oauth = (xAccount as any).oauthAccount;
     if (!oauth || !oauth.access_token) {
         throw new Error(`「${xAccount.displayName}」に X 連携が設定されていません。設定画面で OAuth 連携または手動 API キーを登録してください。`);
     }
+    const oauthAccessToken = decryptSecret(oauth.access_token) as string;
+    const oauthRefreshToken = decryptSecret(oauth.refresh_token) as string | null;
 
     // 3. リフレッシュ判定（期限の 5 分前）
     const now = Math.floor(Date.now() / 1000);
     const isExpired = !oauth.expires_at || oauth.expires_at < (now + 300);
 
-    if (isExpired && oauth.refresh_token) {
+    if (isExpired && oauthRefreshToken) {
         try {
             console.log(`[Twitter OAuth] Refreshing token for user ${userId} / xAccount ${xAccount.id}...`);
             const clientForRefresh = new TwitterApi({
@@ -56,13 +59,14 @@ export async function getTwitterClient(userId: string, xAccountId?: string): Pro
             });
 
             const { client: refreshedClient, accessToken, refreshToken: newRefreshToken, expiresIn } =
-                await clientForRefresh.refreshOAuth2Token(oauth.refresh_token);
+                await clientForRefresh.refreshOAuth2Token(oauthRefreshToken);
 
             await prisma.account.update({
                 where: { id: oauth.id },
                 data: {
-                    access_token: accessToken,
-                    refresh_token: newRefreshToken,
+                    // 保存は再度暗号化する（at-rest 暗号化を維持）
+                    access_token: encryptSecret(accessToken) as string,
+                    refresh_token: (encryptSecret(newRefreshToken) as string) ?? null,
                     expires_at: Math.floor(Date.now() / 1000) + expiresIn,
                 },
             });
@@ -75,5 +79,5 @@ export async function getTwitterClient(userId: string, xAccountId?: string): Pro
         }
     }
 
-    return new TwitterApi(oauth.access_token);
+    return new TwitterApi(oauthAccessToken);
 }

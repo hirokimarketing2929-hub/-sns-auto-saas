@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TwitterApi } from "twitter-api-v2";
+import { encryptSecret } from "@/lib/crypto";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 
 // 認証されたユーザー（Userレコード）を取得
 async function getCurrentUser() {
@@ -50,6 +52,10 @@ export async function GET() {
 
 // 新規サブアカウント作成（手動BYOK or OAuth Account への紐付け or 単に空のサブアカウント）
 export async function POST(req: Request) {
+    // BYOK 検証で外部 X API を叩くため、IP単位の濫用ガードを置く。
+    const limited = enforceRateLimit(`x-accounts:post:${getClientIp(req)}`, 20, 60_000);
+    if (limited) return limited;
+
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "認証が必要です" }, { status: 401 });
 
@@ -106,10 +112,11 @@ export async function POST(req: Request) {
             userId: user.id,
             displayName: displayName.trim(),
             oauthAccountId: oauthAccountId || null,
-            xApiKey: xApiKey || null,
-            xApiSecret: xApiSecret || null,
-            xAccessToken: xAccessToken || null,
-            xAccessSecret: xAccessSecret || null,
+            // at-rest 暗号化（AES-256-GCM）。検証は上で平文のまま済ませ、保存時のみ暗号化する。
+            xApiKey: (encryptSecret(xApiKey) as string) || null,
+            xApiSecret: (encryptSecret(xApiSecret) as string) || null,
+            xAccessToken: (encryptSecret(xAccessToken) as string) || null,
+            xAccessSecret: (encryptSecret(xAccessSecret) as string) || null,
             xUsername,
             xUserId,
             xProfileImageUrl,

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { sendChatworkMessage } from "@/lib/chatwork";
 import { logXApiUsage, logLlmUsage } from "@/lib/api-usage";
+import { resolveAIProvider } from "@/lib/ai-provider";
 
 // リプ回り半自動化：
 //   1. アクティブなターゲットアカウントの最新ポストを X API で取得
@@ -143,16 +144,12 @@ function formatChatworkMessage(args: {
 
 async function resolveProvider(userId: string): Promise<Provider | null> {
     const settings = await prisma.settings.findUnique({ where: { userId } });
-    if (settings?.anthropicApiKey?.trim()) {
-        return { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
-    }
-    if (settings?.openaiApiKey?.trim()) {
-        return { name: "openai", apiKey: settings.openaiApiKey.trim(), model: OPENAI_MODEL };
-    }
-    if (process.env.ANTHROPIC_API_KEY) {
-        return { name: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL };
-    }
-    return null;
+    return resolveAIProvider({
+        anthropicApiKey: settings?.anthropicApiKey,
+        openaiApiKey: settings?.openaiApiKey,
+        anthropicModel: ANTHROPIC_MODEL,
+        openaiModel: OPENAI_MODEL,
+    });
 }
 
 // 1 サブアカウント分の実行（cron では全 active サブアカウントを processUser がループする）

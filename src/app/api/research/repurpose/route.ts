@@ -4,9 +4,19 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { featureGateResponse } from "@/lib/features";
 
 export async function POST(req: Request) {
       try {
+              // Python AIエンジン依存機能。mvp(外部公開)では縮退して提供しない（CTO決定003 §3）。
+              const gated = featureGateResponse("pythonAI");
+              if (gated) return gated;
+
+              // AIエンジン課金が走るため濫用ガード。
+              const limited = enforceRateLimit(`research-repurpose:${getClientIp(req)}`, 30, 60_000);
+              if (limited) return limited;
+
               const session = await getServerSession(authOptions);
               if (!session?.user?.email) {
                         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

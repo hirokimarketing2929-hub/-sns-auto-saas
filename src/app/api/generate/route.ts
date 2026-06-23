@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { researchGenerate } from "@/lib/research-llm";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { resolveAIProvider } from "@/lib/ai-provider";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -150,6 +152,10 @@ function stripUrls(text: string): string {
 
 export async function POST(req: Request) {
     try {
+        // LLM 課金が走るため濫用ガード。
+        const limited = enforceRateLimit(`generate:${getClientIp(req)}`, 30, 60_000);
+        if (limited) return limited;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -196,15 +202,13 @@ export async function POST(req: Request) {
         const winningRules = allKnowledges.filter(k => k.type === "WINNING").map(k => k.content);
         const losingRules = allKnowledges.filter(k => k.type === "LOSING").map(k => k.content);
 
-        // プロバイダ選択（Anthropic 優先 → OpenAI → サーバ環境 Anthropic）。research/direct 双方で使う。
-        let provider: Provider | null = null;
-        if (settings.anthropicApiKey?.trim()) {
-            provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
-        } else if (settings.openaiApiKey?.trim()) {
-            provider = { name: "openai", apiKey: settings.openaiApiKey.trim(), model: OPENAI_MODEL };
-        } else if (process.env.ANTHROPIC_API_KEY) {
-            provider = { name: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL };
-        }
+        // プロバイダ選択（BYOK 必須化: 共通ロジックで mvp はオーナー鍵フォールバック停止）。research/direct 双方で使う。
+        const provider: Provider | null = resolveAIProvider({
+            anthropicApiKey: settings.anthropicApiKey,
+            openaiApiKey: settings.openaiApiKey,
+            anthropicModel: ANTHROPIC_MODEL,
+            openaiModel: OPENAI_MODEL,
+        });
         if (!provider) {
             return NextResponse.json({
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"

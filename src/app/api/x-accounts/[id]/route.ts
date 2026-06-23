@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TwitterApi } from "twitter-api-v2";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 
 async function getCurrentUser() {
     const session = await getServerSession(authOptions);
@@ -43,14 +44,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const xa = await prisma.xAccount.findFirst({ where: { id, userId: user.id } });
     if (!xa) return NextResponse.json({ message: "Not Found" }, { status: 404 });
-    // アカウント詳細ページで保存済みキーを表示するため、本人にのみ平文で返す
+    // アカウント詳細ページで保存済みキーを表示するため、本人にのみ平文で返す（復号して返す）
     return NextResponse.json({
         xAccount: {
             ...mask(xa),
-            xApiKey: xa.xApiKey ?? "",
-            xApiSecret: xa.xApiSecret ?? "",
-            xAccessToken: xa.xAccessToken ?? "",
-            xAccessSecret: xa.xAccessSecret ?? "",
+            xApiKey: (decryptSecret(xa.xApiKey) as string) ?? "",
+            xApiSecret: (decryptSecret(xa.xApiSecret) as string) ?? "",
+            xAccessToken: (decryptSecret(xa.xAccessToken) as string) ?? "",
+            xAccessSecret: (decryptSecret(xa.xAccessSecret) as string) ?? "",
         },
     });
 }
@@ -78,21 +79,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         if (has(k)) data[k] = body[k];
     }
 
-    // BYOK が新たに揃ったら username/icon を取得して更新
-    const fullKey =
-        (data.xApiKey ?? existing.xApiKey) &&
-        (data.xApiSecret ?? existing.xApiSecret) &&
-        (data.xAccessToken ?? existing.xAccessToken) &&
-        (data.xAccessSecret ?? existing.xAccessSecret);
+    // BYOK が新たに揃ったら username/icon を取得して更新。
+    // 検証用の平文を解決する: リクエスト値はそのまま平文、既存値は復号する。
+    const plainApiKey = (data.xApiKey ?? decryptSecret(existing.xApiKey)) as string | null | undefined;
+    const plainApiSecret = (data.xApiSecret ?? decryptSecret(existing.xApiSecret)) as string | null | undefined;
+    const plainAccessToken = (data.xAccessToken ?? decryptSecret(existing.xAccessToken)) as string | null | undefined;
+    const plainAccessSecret = (data.xAccessSecret ?? decryptSecret(existing.xAccessSecret)) as string | null | undefined;
+
+    const fullKey = plainApiKey && plainApiSecret && plainAccessToken && plainAccessSecret;
 
     const keysChanged = ["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"].some(k => has(k));
     if (fullKey && keysChanged) {
         try {
             const client = new TwitterApi({
-                appKey: (data.xApiKey ?? existing.xApiKey) as string,
-                appSecret: (data.xApiSecret ?? existing.xApiSecret) as string,
-                accessToken: (data.xAccessToken ?? existing.xAccessToken) as string,
-                accessSecret: (data.xAccessSecret ?? existing.xAccessSecret) as string,
+                appKey: plainApiKey as string,
+                appSecret: plainApiSecret as string,
+                accessToken: plainAccessToken as string,
+                accessSecret: plainAccessSecret as string,
             });
             const me = await client.v2.me({ "user.fields": ["profile_image_url"] });
             data.xUsername = `@${me.data.username}`;
@@ -102,6 +105,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
             console.error("[x-accounts PATCH] BYOK 検証失敗:", e);
             return NextResponse.json({ message: "入力された API キーで X に接続できませんでした。" }, { status: 400 });
         }
+    }
+
+    // 保存前に BYOK キー欄を暗号化（リクエストに含まれたものだけ）。
+    for (const k of ["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const) {
+        if (typeof data[k] === "string") data[k] = encryptSecret(data[k] as string);
     }
 
     const updated = await prisma.xAccount.update({ where: { id }, data });

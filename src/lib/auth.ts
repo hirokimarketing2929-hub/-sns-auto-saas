@@ -6,6 +6,37 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { cookies } from "next/headers"
 import { getToken } from "next-auth/jwt"
+import { encryptSecret } from "@/lib/crypto"
+import type { Adapter, AdapterAccount } from "next-auth/adapters"
+
+/**
+ * PrismaAdapter をラップし、linkAccount（新規ユーザーの初回 OAuth サインインで
+ * NextAuth が直接 Account を書込む経路）でも OAuth トークンを AES-256-GCM で
+ * 暗号化してから保存する。
+ *
+ * 背景: signIn callback は「既ログイン中ユーザーの 2 つ目以降の連携」だけを
+ * 手動 upsert（暗号化済み）で処理し、未ログインの初回サインインは
+ * `return true` で adapter に委譲する。素の PrismaAdapter.linkAccount は
+ * access_token/refresh_token/id_token を平文のまま account.create するため、
+ * 初回トークンだけが平文滞留していた（004 §C-1 の既知の穴）。
+ * ここで linkAccount を差し替え、初回も他経路と同じ enc:v1: 形式で保存する。
+ */
+function encryptedPrismaAdapter(): Adapter {
+    const base = PrismaAdapter(prisma) as Adapter
+    const originalLinkAccount = base.linkAccount?.bind(base)
+    return {
+        ...base,
+        linkAccount: originalLinkAccount
+            ? (account: AdapterAccount) =>
+                  originalLinkAccount({
+                      ...account,
+                      access_token: (encryptSecret(account.access_token) as string | undefined) ?? undefined,
+                      refresh_token: (encryptSecret(account.refresh_token) as string | undefined) ?? undefined,
+                      id_token: (encryptSecret(account.id_token) as string | undefined) ?? undefined,
+                  })
+            : base.linkAccount,
+    }
+}
 
 // NextAuthの型定義を拡張
 declare module "next-auth" {
@@ -20,7 +51,7 @@ declare module "next-auth" {
 }
 
 export const authOptions: NextAuthOptions = {
-    adapter: PrismaAdapter(prisma) as any,
+    adapter: encryptedPrismaAdapter() as any,
     session: {
         strategy: "jwt",
     },
@@ -138,12 +169,13 @@ export const authOptions: NextAuthOptions = {
                 },
                 update: {
                     userId: existingUserId,
-                    access_token: account.access_token ?? null,
-                    refresh_token: account.refresh_token ?? null,
+                    // OAuth トークンは at-rest 暗号化（AES-256-GCM）して保存する。
+                    access_token: (encryptSecret(account.access_token) as string) ?? null,
+                    refresh_token: (encryptSecret(account.refresh_token) as string) ?? null,
                     expires_at: account.expires_at ?? null,
                     token_type: account.token_type ?? null,
                     scope: account.scope ?? null,
-                    id_token: account.id_token ?? null,
+                    id_token: (encryptSecret(account.id_token) as string) ?? null,
                     session_state: (account.session_state as string) ?? null,
                 },
                 create: {
@@ -151,12 +183,12 @@ export const authOptions: NextAuthOptions = {
                     type: account.type,
                     provider: account.provider,
                     providerAccountId: account.providerAccountId,
-                    access_token: account.access_token ?? null,
-                    refresh_token: account.refresh_token ?? null,
+                    access_token: (encryptSecret(account.access_token) as string) ?? null,
+                    refresh_token: (encryptSecret(account.refresh_token) as string) ?? null,
                     expires_at: account.expires_at ?? null,
                     token_type: account.token_type ?? null,
                     scope: account.scope ?? null,
-                    id_token: account.id_token ?? null,
+                    id_token: (encryptSecret(account.id_token) as string) ?? null,
                     session_state: (account.session_state as string) ?? null,
                 },
             })

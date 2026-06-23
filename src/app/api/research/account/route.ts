@@ -5,6 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { getTwitterClient } from "@/lib/twitter";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
+import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { featureGateResponse } from "@/lib/features";
 
 // 指定 @username の公開ポストを X API 経由で取得し、エンゲージメント最大のものを
 // 既存の repurpose エンジンに投げて「型と感情」を抽出 → 自社テーマに置き換えた
@@ -17,6 +19,14 @@ import { callEngine, EngineUnavailableError } from "@/lib/ai-engine";
 //   - ユーザー本人の BYOK キーで認証する（自分のレートリミット内で動作）。
 export async function POST(req: Request) {
     try {
+        // Python AIエンジン依存機能。mvp(外部公開)では縮退して提供しない（CTO決定003 §3）。
+        const gated = featureGateResponse("pythonAI");
+        if (gated) return gated;
+
+        // X API + AIエンジン課金が走るため濫用ガード。
+        const limited = enforceRateLimit(`research-account:${getClientIp(req)}`, 20, 60_000);
+        if (limited) return limited;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

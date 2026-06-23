@@ -10,10 +10,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 export default function LoginPage() {
     const router = useRouter();
-    const [isLogin, setIsLogin] = useState(true);
+    // 招待リンク（/login?invite=XXX）から招待コードを初期値として読み取り、登録モードで開く。
+    const initialInvite =
+        typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("invite") || ""
+            : "";
+
+    const [isLogin, setIsLogin] = useState(!initialInvite);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
+    const [inviteCode, setInviteCode] = useState(initialInvite);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -43,7 +50,7 @@ export default function LoginPage() {
                 const res = await fetch("/api/register", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, password, name }),
+                    body: JSON.stringify({ email, password, name, inviteCode }),
                 });
 
                 const data = await res.json();
@@ -90,6 +97,20 @@ export default function LoginPage() {
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                 />
+                            </div>
+                        )}
+                        {!isLogin && (
+                            <div className="space-y-2">
+                                <Label htmlFor="inviteCode">招待コード</Label>
+                                <Input
+                                    id="inviteCode"
+                                    placeholder="クローズドβの招待コード"
+                                    value={inviteCode}
+                                    onChange={(e) => setInviteCode(e.target.value)}
+                                />
+                                <p className="text-xs text-slate-400">
+                                    現在は招待制（クローズドβ）です。招待コードをお持ちの方のみご登録いただけます。
+                                </p>
                             </div>
                         )}
                         <div className="space-y-2">

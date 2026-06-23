@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
+import { resolveAIProvider } from "@/lib/ai-provider";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -494,19 +495,15 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "設定情報が見つかりません。ナレッジ画面から AI 生成設定を保存してください。" }, { status: 400 });
         }
 
-        // プロバイダ選択（優先順位: ユーザーAnthropic → ユーザーOpenAI → サーバ環境Anthropic）
-        let provider: Provider | null = null;
-        let providerSource = "none";
-        if (settings.anthropicApiKey && settings.anthropicApiKey.trim()) {
-            provider = { name: "anthropic", apiKey: settings.anthropicApiKey.trim(), model: ANTHROPIC_MODEL };
-            providerSource = "user:anthropic";
-        } else if (settings.openaiApiKey && settings.openaiApiKey.trim()) {
-            provider = { name: "openai", apiKey: settings.openaiApiKey.trim(), model: OPENAI_MODEL };
-            providerSource = "user:openai";
-        } else if (process.env.ANTHROPIC_API_KEY) {
-            provider = { name: "anthropic", apiKey: process.env.ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL };
-            providerSource = "env:anthropic";
-        }
+        // プロバイダ選択（BYOK 必須化: 共通ロジックで mvp はオーナー鍵フォールバック停止）
+        const resolved = resolveAIProvider({
+            anthropicApiKey: settings.anthropicApiKey,
+            openaiApiKey: settings.openaiApiKey,
+            anthropicModel: ANTHROPIC_MODEL,
+            openaiModel: OPENAI_MODEL,
+        });
+        const provider: Provider | null = resolved;
+        const providerSource = resolved?.source ?? "none";
         console.log(`[structure-rewrite] provider resolved: ${providerSource}, user-anthropic-len: ${settings.anthropicApiKey?.length ?? 0}, user-openai-len: ${settings.openaiApiKey?.length ?? 0}, env-anthropic: ${process.env.ANTHROPIC_API_KEY ? "set" : "unset"}`);
 
         // ペルソナ反映はオプトイン（applyPersonaToGeneration）。OFF時はターゲット/悩み/コンセプト/プロフィールを
