@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -10,22 +10,23 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 export default function LoginPage() {
     const router = useRouter();
-    // 招待リンク（/login?invite=XXX）から招待コードを初期値として読み取り、登録モードで開く。
-    // /login?signup=1 でも登録モードで開く（LPの「招待コードで登録する」ボタン用）。
-    const initialSearch =
-        typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search)
-            : null;
-    const initialInvite = initialSearch?.get("invite") || "";
-    const wantSignup = initialSearch?.get("signup") === "1" || !!initialInvite;
-
-    const [isLogin, setIsLogin] = useState(!wantSignup);
+    // 招待リンク（/login?invite=XXX）/ /login?signup=1 から登録モード・招待コードを反映。
+    // SSR初期描画とクライアントのズレ（hydration不整合）を避けるため、初期値ではなく
+    // マウント後の useEffect で URL を読み取り、確実に登録モードへ切り替える。
+    const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
-    const [inviteCode, setInviteCode] = useState(initialInvite);
+    const [inviteCode, setInviteCode] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const sp = new URLSearchParams(window.location.search);
+        const invite = sp.get("invite") || "";
+        if (invite) setInviteCode(invite);
+        if (invite || sp.get("signup") === "1") setIsLogin(false);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
