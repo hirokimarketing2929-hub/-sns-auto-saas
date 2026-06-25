@@ -11,12 +11,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export default function LoginPage() {
     const router = useRouter();
     // 招待リンク（/login?invite=XXX）から招待コードを初期値として読み取り、登録モードで開く。
-    const initialInvite =
+    // /login?signup=1 でも登録モードで開く（LPの「招待コードで登録する」ボタン用）。
+    const initialSearch =
         typeof window !== "undefined"
-            ? new URLSearchParams(window.location.search).get("invite") || ""
-            : "";
+            ? new URLSearchParams(window.location.search)
+            : null;
+    const initialInvite = initialSearch?.get("invite") || "";
+    const wantSignup = initialSearch?.get("signup") === "1" || !!initialInvite;
 
-    const [isLogin, setIsLogin] = useState(!initialInvite);
+    const [isLogin, setIsLogin] = useState(!wantSignup);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");

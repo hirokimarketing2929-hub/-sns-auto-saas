@@ -42,7 +42,7 @@ export default function Home() {
 
                 <div className="mt-10 flex flex-col gap-3 sm:flex-row">
                     <Button asChild size="lg">
-                        <Link href="/login">招待コードで登録する</Link>
+                        <Link href="/login?signup=1">招待コードで登録する</Link>
                     </Button>
                     <Button asChild size="lg" variant="outline" className="border-slate-600 text-slate-200">
                         <Link href="/login">ログイン</Link>
