@@ -3,13 +3,12 @@ import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { TwitterApi } from "twitter-api-v2";
+import { assertCronAuthorized } from "@/lib/cron-auth";
 
 export async function GET(req: Request) {
-    // Vercel Cron / 手動トリガーのみ許可
-    const authHeader = req.headers.get("authorization");
-    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    // cron 認証: 全環境で CRON_SECRET 必須（fail-closed・RT-002）。
+    const denied = assertCronAuthorized(req);
+    if (denied) return denied;
 
     try {
         const db = prisma as any;

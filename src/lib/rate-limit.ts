@@ -67,6 +67,53 @@ export function getClientIp(req: Request): string {
     return req.headers.get("x-real-ip") || "unknown";
 }
 
+// =============================================================================
+// ログイン試行ロックアウト（RT-004 対策）。
+//
+// 失敗回数を email 単位でカウントし、しきい値超過で一定時間ロックする。
+// これによりオンライン総当たり（弱PWユーザーへの連続試行）を構造的に抑止する。
+// 注意: 現状プロセス内メモリ（rate-limit と同前提）。マルチインスタンス化時は
+//       共有ストアへ差し替える（RT-007 と同じ既知の運用前提）。
+// =============================================================================
+
+const LOGIN_MAX_FAILURES = 5;          // 連続失敗の許容回数
+const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000; // ロック/カウント窓（15分）
+
+type FailBucket = { count: number; resetAt: number };
+const loginFailures = new Map<string, FailBucket>();
+
+function loginKey(email: string): string {
+    return `login-fail:${email.trim().toLowerCase()}`;
+}
+
+/** 現在ロックアウト中か。ロック中なら残り秒も返す。 */
+export function isLoginLockedOut(email: string): { locked: boolean; retryAfterSec: number } {
+    const now = Date.now();
+    const b = loginFailures.get(loginKey(email));
+    if (!b || b.resetAt <= now) return { locked: false, retryAfterSec: 0 };
+    if (b.count >= LOGIN_MAX_FAILURES) {
+        return { locked: true, retryAfterSec: Math.max(1, Math.ceil((b.resetAt - now) / 1000)) };
+    }
+    return { locked: false, retryAfterSec: 0 };
+}
+
+/** ログイン失敗を1回記録する（窓内で累積、超過でロック状態になる）。 */
+export function recordLoginFailure(email: string): void {
+    const now = Date.now();
+    const key = loginKey(email);
+    const b = loginFailures.get(key);
+    if (!b || b.resetAt <= now) {
+        loginFailures.set(key, { count: 1, resetAt: now + LOGIN_LOCK_WINDOW_MS });
+        return;
+    }
+    b.count += 1;
+}
+
+/** ログイン成功時に失敗カウンタをリセットする。 */
+export function clearLoginFailures(email: string): void {
+    loginFailures.delete(loginKey(email));
+}
+
 /**
  * レート超過時の共通 429 レスポンス。route 側で result.ok=false の時に返す。
  */

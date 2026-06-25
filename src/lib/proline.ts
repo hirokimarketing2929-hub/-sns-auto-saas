@@ -34,15 +34,30 @@ export const PROLINE_DIRECT_URL: string =
         : `${PROLINE_URL.replace(/\/+$/, "")}/direct`;
 
 /**
- * 初回ログインポップアップの誘導先（オーナー本人の LINE 友だち追加URL）。
- * ProLine アフィリではなく、オーナーのアカウントに直接つなぐ。
+ * 初回オンボーディング・ポップアップの誘導先 = オーナーの「公式LINE」友だち追加URL（決定 #027）。
+ *
+ * 連携ファネルの正しい受け皿:
+ *   ProX登録 → ポップアップ → ★公式LINE友だち追加（このURL）→ 公式LINE1通目 → プロライン登録
+ * 直プロライン誘導（#024旧設計）ではなく、いったん公式LINEで owned list を資産化してから
+ * 1通目でプロラインへ誘導する。公式LINEの「あいさつメッセージ（1通目）」はプロライン側に設定済み。
+ *
  * 環境変数 NEXT_PUBLIC_ONBOARDING_LINE_URL があれば優先。
+ *
+ * 注意: かつてここには「オーナー個人LINE」が入っていたが、現在は autosns 管理の
+ *   「公式LINE」友だち追加URLが正。個人LINEとは混同しないこと。
  */
-const DEFAULT_ONBOARDING_LINE_URL = "https://q169hcpg.autosns.app/addfriend/s/cJb9d1rWoB/@303wiftq";
+const DEFAULT_ONBOARDING_OFFICIAL_LINE_URL = "https://q169hcpg.autosns.app/addfriend/s/cJb9d1rWoB/@303wiftq";
 
-export const ONBOARDING_LINE_URL: string =
+export const ONBOARDING_OFFICIAL_LINE_URL: string =
     process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL && process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL.length > 0
         ? process.env.NEXT_PUBLIC_ONBOARDING_LINE_URL
-        : DEFAULT_ONBOARDING_LINE_URL;
+        : DEFAULT_ONBOARDING_OFFICIAL_LINE_URL;
+
+/**
+ * 後方互換エイリアス（旧名 ONBOARDING_LINE_URL を参照する既存コードのため）。
+ * 値は公式LINE友だち追加URL（= ONBOARDING_OFFICIAL_LINE_URL）と同一。
+ * @deprecated 新規コードは ONBOARDING_OFFICIAL_LINE_URL を使うこと。
+ */
+export const ONBOARDING_LINE_URL: string = ONBOARDING_OFFICIAL_LINE_URL;
 
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sendToOwnerSheet } from "@/lib/owner-sheets";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 import { checkInviteCode } from "@/lib/beta-gate";
+import { checkPasswordStrength } from "@/lib/password-policy";
 
 export async function POST(req: Request) {
     try {
@@ -18,6 +19,12 @@ export async function POST(req: Request) {
                 { message: "メールアドレスとパスワードは必須です" },
                 { status: 400 }
             );
+        }
+
+        // パスワード強度ポリシー（RT-004）。弱PWは入口で構造的に拒否する。
+        const pwCheck = checkPasswordStrength(password);
+        if (!pwCheck.ok) {
+            return NextResponse.json({ message: pwCheck.message }, { status: 400 });
         }
 
         // クローズドβ招待制ゲート（B-4）。mvp では有効な招待コードが無いと登録不可。

@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs"
 import { cookies } from "next/headers"
 import { getToken } from "next-auth/jwt"
 import { encryptSecret } from "@/lib/crypto"
+import { isLoginLockedOut, recordLoginFailure, clearLoginFailures } from "@/lib/rate-limit"
 import type { Adapter, AdapterAccount } from "next-auth/adapters"
 
 /**
@@ -77,7 +78,10 @@ export const authOptions: NextAuthOptions = {
                     scope: "users.read tweet.read tweet.write like.read dm.write offline.access",
                 },
             },
-            allowDangerousEmailAccountLinking: true,
+            // RT-005: allowDangerousEmailAccountLinking は撤去（既定 false）。
+            // この設定は「OAuth が返すメールが既存ユーザーと一致すれば本人確認なしで自動リンク」
+            // する危険設定で、未検証メール経由のアカウント乗っ取り経路になっていた。
+            // 既ログインユーザーの2つ目以降の連携は下の signIn callback（明示フロー）に一本化済み。
         }),
         CredentialsProvider({
             name: "メールアドレスとパスワード",
@@ -90,19 +94,32 @@ export const authOptions: NextAuthOptions = {
                     throw new Error("メールアドレスとパスワードを入力してください")
                 }
 
+                // ログイン試行ロックアウト（RT-004）。連続失敗が続くアカウントは一定時間ロックし、
+                // オンライン総当たりを構造的に止める。DB照会の前に判定して負荷も抑える。
+                const lock = isLoginLockedOut(credentials.email)
+                if (lock.locked) {
+                    throw new Error(`試行回数が上限に達しました。約${Math.ceil(lock.retryAfterSec / 60)}分後に再試行してください。`)
+                }
+
                 const user = await prisma.user.findUnique({
                     where: { email: credentials.email }
                 })
 
                 if (!user || !user.password) {
+                    // 存在しないユーザーへの試行も失敗としてカウント（user enumeration ＋ 総当たり抑止）。
+                    recordLoginFailure(credentials.email)
                     throw new Error("ユーザーが存在しないか、パスワードが間違っています")
                 }
 
                 const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
 
                 if (!isPasswordValid) {
+                    recordLoginFailure(credentials.email)
                     throw new Error("パスワードが間違っています")
                 }
+
+                // 成功したら失敗カウンタをリセット。
+                clearLoginFailures(credentials.email)
 
                 return {
                     id: user.id,

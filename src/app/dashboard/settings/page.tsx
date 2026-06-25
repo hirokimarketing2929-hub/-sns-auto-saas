@@ -84,6 +84,7 @@ export default function SettingsPage() {
     // プロラインフリー連携 webhook token
     const [funnelToken, setFunnelToken] = useState<string>("");
     const [funnelUrl, setFunnelUrl] = useState<string>("");
+    const [signingSecret, setSigningSecret] = useState<string>("");
     const [copyNotice, setCopyNotice] = useState<string>("");
 
     useEffect(() => {
@@ -98,6 +99,7 @@ export default function SettingsPage() {
                 const data = await res.json();
                 if (data.token) {
                     setFunnelToken(data.token);
+                    setSigningSecret(data.signingSecret || "");
                     const origin = typeof window !== "undefined" ? window.location.origin : "";
                     setFunnelUrl(`${origin}/api/funnel/webhook/${data.token}`);
                 }
@@ -114,6 +116,7 @@ export default function SettingsPage() {
             if (res.ok) {
                 const data = await res.json();
                 setFunnelToken(data.token);
+                setSigningSecret(data.signingSecret || "");
                 const origin = typeof window !== "undefined" ? window.location.origin : "";
                 setFunnelUrl(`${origin}/api/funnel/webhook/${data.token}`);
                 setCopyNotice("新しい URL を発行しました");
@@ -134,29 +137,47 @@ export default function SettingsPage() {
         }
     };
 
+    // 署名付き GAS コード（HMAC-SHA256）。受信側 verifyWebhookSignature と数学的に一致:
+    //   署名対象 = `${timestamp}.${body}` / 鍵 = signingSecret(hex文字列のUTF-8バイト)
+    //   ヘッダ   = X-ProX-Timestamp(ミリ秒) / X-ProX-Signature(小文字hex)
+    //   body は「実際に送るバイト列」をそのまま署名する（JSON.stringify した同一文字列）。
     const gasSnippet = funnelUrl ? `function doPost(e) {
   // 1) プロラインからのデータをシートに書き込む既存処理
   //    （元のマニュアル通りの処理を残す）
   //    ...
 
-  // 2) 本 SaaS に転送してダッシュボードで追跡できるようにする
+  // 2) 本 SaaS に署名付きで転送してダッシュボードで追跡できるようにする
   try {
     var payload = e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+
+    // --- 署名秘密（この値は ProX 設定画面に表示されたものを貼る。外部に出さない）---
+    var SIGNING_SECRET = '${signingSecret || "<ProX設定画面の署名秘密をここに貼る>"}';
+
+    // 送る本文。署名対象と「全く同じ文字列」を使うのが必須（整形のズレ＝検証失敗）。
+    var body = JSON.stringify({
+      form_name: '<フォーム名をここに>',  // 例: 無料相談
+      date: payload.date || new Date().toISOString(),
+      uid: payload.uid,
+      snsname: payload.snsname,
+      form_data: payload.form_data || payload,
+      // 以下は LP 側から form に混ぜている場合のみ（任意）
+      utm_source: payload.utm_source,
+      utm_medium: payload.utm_medium,
+      utm_campaign: payload.utm_campaign,
+      utm_content: payload.utm_content
+    });
+
+    var timestamp = String(Date.now()); // ミリ秒。受信側の ±5分窓に収める
+    var signature = prox_sign_(SIGNING_SECRET, timestamp + '.' + body);
+
     UrlFetchApp.fetch('${funnelUrl}', {
       method: 'post',
       contentType: 'application/json',
-      payload: JSON.stringify({
-        form_name: '<フォーム名をここに>',  // 例: 無料相談
-        date: payload.date || new Date().toISOString(),
-        uid: payload.uid,
-        snsname: payload.snsname,
-        form_data: payload.form_data || payload,
-        // 以下は LP 側から form に混ぜている場合のみ（任意）
-        utm_source: payload.utm_source,
-        utm_medium: payload.utm_medium,
-        utm_campaign: payload.utm_campaign,
-        utm_content: payload.utm_content
-      }),
+      headers: {
+        'X-ProX-Timestamp': timestamp,
+        'X-ProX-Signature': signature
+      },
+      payload: body,           // ← 署名した body と同一バイト列を送る
       muteHttpExceptions: true
     });
   } catch (err) {
@@ -165,6 +186,21 @@ export default function SettingsPage() {
 
   return ContentService.createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// HMAC-SHA256(message, key) を小文字 hex で返す。
+// 受信側 createHmac('sha256', secretHex).update(message).digest('hex') と一致する。
+// 鍵は secretHex 文字列の UTF-8 バイト列（Node 側も hex 文字列を key にしているため一致）。
+function prox_sign_(secret, message) {
+  var raw = Utilities.computeHmacSha256Signature(message, secret); // byte[]（符号付き）
+  var hex = '';
+  for (var i = 0; i < raw.length; i++) {
+    var b = (raw[i] + 256) % 256;            // 符号付きバイトを 0..255 に
+    var h = b.toString(16);
+    if (h.length === 1) h = '0' + h;          // 1桁は 0 埋め
+    hex += h;
+  }
+  return hex; // 小文字 hex
 }` : "";
 
     const fetchSettings = async () => {
@@ -480,9 +516,29 @@ export default function SettingsPage() {
                                     </p>
                                 </div>
 
+                                {signingSecret && (
+                                    <div className="space-y-2">
+                                        <Label>🔐 署名秘密（HMAC 鍵 / 下の GAS コードに自動で埋め込み済み）</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                value={signingSecret}
+                                                readOnly
+                                                type="password"
+                                                className="bg-slate-50 font-mono text-xs"
+                                            />
+                                            <Button type="button" variant="outline" onClick={() => copyToClipboard(signingSecret, "署名秘密")} disabled={!signingSecret}>
+                                                コピー
+                                            </Button>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            ⚠️ この値は<strong>あなた専用の署名鍵</strong>です。第三者に渡さないでください。偽の連携データ注入を防ぐため、β以降は GAS にこの署名が必須になります。URL を再発行すると署名秘密も変わります。
+                                        </p>
+                                    </div>
+                                )}
+
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <Label>📝 GAS に貼り付けるテンプレートコード</Label>
+                                        <Label>📝 GAS に貼り付けるテンプレートコード（署名付き）</Label>
                                         <Button type="button" variant="outline" size="sm" onClick={() => copyToClipboard(gasSnippet, "GAS コード")} disabled={!gasSnippet}>
                                             コードをコピー
                                         </Button>
@@ -506,6 +562,9 @@ export default function SettingsPage() {
                                         <div className="pl-5 mt-2 space-y-2">
                                             <p>
                                                 プロラインの <strong>シナリオ登録時の「外部システムへ URL を送信」機能</strong>を使う場合は、GAS 不要で本 SaaS の webhook URL を直接登録するだけで完了します。
+                                            </p>
+                                            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                                                ⚠️ β以降は署名必須化のため、この「GAS なし直接送信」方式は署名を付けられず受信側で拒否されます。β運用では上記 <strong>A. の署名付き GAS 方式</strong>を使ってください。
                                             </p>
                                             <ol className="list-decimal pl-4 space-y-1">
                                                 <li>プロラインの該当シナリオ設定画面を開く</li>

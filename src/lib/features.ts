@@ -44,8 +44,13 @@ const MVP_HIDDEN_FEATURES: ReadonlyArray<FeatureKey> = [
     "pythonAI",
 ];
 
+// RT-001 対策（fail-safe）: 安全装置を環境変数1個の「正常系」に賭けない。
+// 既定を最も安全な側（mvp = 招待ゲートON・BYOK必須・機能縮退）に倒す。
+//   - 値が厳密に "full" のときだけ full（＝開発者が明示した場合のみ全開放）。
+//   - 未設定・スペルミス・前後空白・"MVP"/"prod" 等の誤設定はすべて mvp に縮退する。
+// これにより「設定漏れで全βセーフガードが同時失効」する単一障害点を構造的に解消する。
 export function getReleaseMode(): "mvp" | "full" {
-    return process.env.RELEASE_MODE === "mvp" ? "mvp" : "full";
+    return process.env.RELEASE_MODE?.trim() === "full" ? "full" : "mvp";
 }
 
 export function isFeatureEnabled(key: FeatureKey): boolean {

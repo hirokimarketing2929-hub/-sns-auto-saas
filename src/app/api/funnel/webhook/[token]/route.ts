@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccountId } from "@/lib/active-x-account";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
+import { verifyWebhookSignature } from "@/lib/webhook-sig";
 
 // プロラインフリーからの form_data を受け取る webhook 受信エンドポイント。
 // 想定: ユーザーの GAS が doPost 内で本エンドポイントに JSON を転送してくる。
@@ -43,7 +44,20 @@ export async function POST(
             return NextResponse.json({ error: "Unknown token" }, { status: 401 });
         }
 
-        const body = await req.json().catch(() => ({} as Record<string, unknown>));
+        // HMAC 署名検証（RT-003）。raw body に対して検証するため、先に text() で読む。
+        // トークン＝識別子、署名＝真正性の2段構え。トークン漏洩だけでは偽造投入できない。
+        const rawBody = await req.text().catch(() => "");
+        const sig = verifyWebhookSignature(token, rawBody, req.headers);
+        if (!sig.ok) {
+            return NextResponse.json({ error: sig.message }, { status: sig.status });
+        }
+
+        let body: Record<string, unknown> = {};
+        try {
+            body = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : {};
+        } catch {
+            body = {};
+        }
 
         // プロラインのデータ構造を吸収（フォーム送信 / シナリオ登録 両対応）
         //   - フォーム送信: form_name + form_data

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { errorResponse } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 import { runAutoReplyForCampaigns } from "@/lib/autoreply-runner";
+import { assertCronAuthorized } from "@/lib/cron-auth";
 
 // 送信ループは対象ユーザーごとにジッター待機を挟むため、関数の最大実行時間を引き上げる。
 // （Vercel の既定タイムアウトだとバッチが途中で打ち切られ、取りこぼしが発生し得る）
@@ -9,11 +10,9 @@ export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-    // Vercel Cron / 手動トリガーのみ許可
-    const authHeader = req.headers.get("authorization");
-    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    // cron 認証: 全環境で CRON_SECRET 必須（fail-closed・RT-002）。
+    const denied = assertCronAuthorized(req);
+    if (denied) return denied;
 
     try {
         // Prisma Client の型定義不整合を回避するため、anyキャストで強行突破 (マイグレーションは完了している前提)

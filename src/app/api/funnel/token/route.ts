@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
+import { deriveWebhookSecret } from "@/lib/webhook-sig";
 
 function generateToken(): string {
     // URL-safe 32 文字のランダム token
@@ -36,7 +37,14 @@ export async function GET() {
         });
     }
 
-    return NextResponse.json({ token: settings.funnelWebhookToken });
+    // 署名秘密（HMAC 鍵）。token から サーバ鍵で導出した値で、GAS の署名に使う。
+    // 認証済みの本人セッションにのみ返す（誰でも叩ける webhook 受信側には絶対に返さない）。
+    // サーバ鍵未設定なら null（署名機能オフ）。
+    const signingSecret = settings.funnelWebhookToken
+        ? deriveWebhookSecret(settings.funnelWebhookToken)
+        : null;
+
+    return NextResponse.json({ token: settings.funnelWebhookToken, signingSecret });
 }
 
 // トークン再発行（古い token を無効化したい場合）
@@ -54,5 +62,6 @@ export async function POST() {
         update: { funnelWebhookToken: token },
         create: { userId: user.id, funnelWebhookToken: token },
     });
-    return NextResponse.json({ token });
+    const signingSecret = deriveWebhookSecret(token);
+    return NextResponse.json({ token, signingSecret });
 }

@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
+import { assertCronAuthorized } from "@/lib/cron-auth";
 
 export async function GET(req: Request) {
-    // cron 認証: CRON_SECRET の Bearer トークンを必須化する。
-    // （旧実装は User-Agent に "cron" を含むだけで通過＝なりすまし可能だった。CTO監査 3c で修正）
-    // Vercel Cron / GitHub Actions / cron-job.org いずれも Authorization: Bearer <CRON_SECRET> を送る。
-    const authHeader = req.headers.get("authorization");
-    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    // cron 認証: 全環境で CRON_SECRET 必須（fail-closed・RT-002）。
+    // （旧実装は NODE_ENV=production 限定で、preview/誤デプロイでは認証ゼロだった。RT-002 で是正）
+    const denied = assertCronAuthorized(req);
+    if (denied) return denied;
 
     try {
         // multi-account 対応: BYOK または OAuth 連携を持つ全 XAccount を対象に同期する

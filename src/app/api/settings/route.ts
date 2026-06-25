@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { TwitterApi } from "twitter-api-v2";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { encryptSecret, maskSecret, isMaskedSentinel } from "@/lib/crypto";
 import { errorResponse } from "@/lib/api-error";
 
 // Settings に保存される機微フィールド（at-rest 暗号化対象）。
@@ -72,10 +72,11 @@ export async function GET() {
             hasTwitterOAuth,
             twitterAccounts,
         };
-        // 機微フィールドは復号して本人に返す（フロントの「保存済みキー表示」用）。
+        // RT-005: 機微フィールドは復号した平文を返さない。マスク表示（"設定済み"/末尾4桁）にする。
+        // フロントは「設定済みか（locked 表示）」の判定にしか使わないため、平文は不要。
         for (const f of SECRET_SETTINGS_FIELDS) {
             if (typeof (responseData as any)[f] === "string") {
-                (responseData as any)[f] = decryptSecret((responseData as any)[f]);
+                (responseData as any)[f] = maskSecret((responseData as any)[f]);
             }
         }
         return NextResponse.json(responseData);
@@ -136,17 +137,41 @@ export async function PUT(req: Request) {
             if (has(key)) updateFields[key] = data[key];
         }
 
-        // X アカウント名 / アイコンは、明示送信または APIキー連携による自動取得があった場合のみ更新
+        // RT-005: マスク済み（ユーザー未編集の据え置き）値は鍵として保存しない。
+        // フロントが GET で受け取ったマスクをそのまま PUT で送り返しても、本物の鍵を
+        // マスク文字列で上書きしない（構造的に防ぐ）。該当フィールドは書込み対象から外す。
+        //
+        // OBS-1: この削除は「自動プロフィール取得」より前で行う。マスク値（"••••設定済み"）が
+        //   残ったまま下の取得ブロックに入ると、マスク文字列を本物の API キーと誤認して
+        //   TwitterApi クライアントを組み無駄な外部呼び出し（必ず失敗）を1回発生させていた。
+        //   先に削除しておけば updateFields[xApiKey] 等が undefined になり、未編集時は
+        //   「鍵が揃っていない」と正しく判定され取得自体が走らない（構造で順序バグを消す）。
+        for (const f of SECRET_SETTINGS_FIELDS) {
+            if (isMaskedSentinel(updateFields[f])) {
+                delete updateFields[f];
+            }
+        }
+
+        // X アカウント名 / アイコンは、明示送信または APIキー連携による自動取得があった場合のみ更新。
+        // 鍵はマスク削除後の updateFields を参照する（生の request 値ではなくマスク除去済み＝本物の鍵のみ）。
         let xAccountName: string | undefined = has("xAccountName") ? data.xAccountName : undefined;
         let xProfileImageUrl: string | null | undefined = has("xProfileImageUrl") ? (data.xProfileImageUrl || null) : undefined;
 
-        if ((!xAccountName || !xProfileImageUrl) && data.xApiKey && data.xApiSecret && data.xAccessToken && data.xAccessSecret) {
+        const apiKey = updateFields.xApiKey;
+        const apiSecret = updateFields.xApiSecret;
+        const accessToken = updateFields.xAccessToken;
+        const accessSecret = updateFields.xAccessSecret;
+        if (
+            (!xAccountName || !xProfileImageUrl) &&
+            typeof apiKey === "string" && typeof apiSecret === "string" &&
+            typeof accessToken === "string" && typeof accessSecret === "string"
+        ) {
             try {
                 const client = new TwitterApi({
-                    appKey: data.xApiKey,
-                    appSecret: data.xApiSecret,
-                    accessToken: data.xAccessToken,
-                    accessSecret: data.xAccessSecret,
+                    appKey: apiKey,
+                    appSecret: apiSecret,
+                    accessToken: accessToken,
+                    accessSecret: accessSecret,
                 });
                 const me = await client.v2.me({ "user.fields": ["profile_image_url"] });
                 if (!xAccountName) xAccountName = `@${me.data.username}`;
@@ -172,10 +197,11 @@ export async function PUT(req: Request) {
             create: { userId: user.id, ...updateFields }
         });
 
+        // RT-005: 保存後レスポンスも平文を返さずマスク表示にする。
         const responseSettings: any = { ...updatedSettings };
         for (const f of SECRET_SETTINGS_FIELDS) {
             if (typeof responseSettings[f] === "string") {
-                responseSettings[f] = decryptSecret(responseSettings[f]);
+                responseSettings[f] = maskSecret(responseSettings[f]);
             }
         }
         return NextResponse.json(responseSettings);

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TwitterApi } from "twitter-api-v2";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { encryptSecret, decryptSecret, maskSecret, isMaskedSentinel } from "@/lib/crypto";
 
 async function getCurrentUser() {
     const session = await getServerSession(authOptions);
@@ -44,14 +44,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const xa = await prisma.xAccount.findFirst({ where: { id, userId: user.id } });
     if (!xa) return NextResponse.json({ message: "Not Found" }, { status: 404 });
-    // アカウント詳細ページで保存済みキーを表示するため、本人にのみ平文で返す（復号して返す）
+    // RT-005: 保存済みキーは平文で返さない。マスク表示（"設定済み"/末尾4桁）にする。
+    // フロントは「設定済みか（locked 表示）」の判定にしか使わないため平文は不要。
     return NextResponse.json({
         xAccount: {
             ...mask(xa),
-            xApiKey: (decryptSecret(xa.xApiKey) as string) ?? "",
-            xApiSecret: (decryptSecret(xa.xApiSecret) as string) ?? "",
-            xAccessToken: (decryptSecret(xa.xAccessToken) as string) ?? "",
-            xAccessSecret: (decryptSecret(xa.xAccessSecret) as string) ?? "",
+            xApiKey: maskSecret(xa.xApiKey),
+            xApiSecret: maskSecret(xa.xApiSecret),
+            xAccessToken: maskSecret(xa.xAccessToken),
+            xAccessSecret: maskSecret(xa.xAccessSecret),
         },
     });
 }
@@ -77,6 +78,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         "applyPersonaToGeneration",
     ]) {
         if (has(k)) data[k] = body[k];
+    }
+
+    // RT-005: マスク済み（未編集の据え置き）値は鍵として扱わない。
+    // フロントが GET のマスクをそのまま送り返しても、本物の鍵を上書き/誤検証しないよう除去する。
+    for (const k of ["xApiKey", "xApiSecret", "xAccessToken", "xAccessSecret"] as const) {
+        if (isMaskedSentinel(data[k])) delete data[k];
     }
 
     // BYOK が新たに揃ったら username/icon を取得して更新。
