@@ -16,6 +16,12 @@ import { resolveAIProvider } from "@/lib/ai-provider";
 // 手動トリガー（UI から POST）と cron（Bearer/header）両対応。
 // manual = true パラメータで認証ユーザーとして実行、body 空だと cron モードで全ユーザー処理。
 
+// Vercel Hobby は関数を 60 秒で強制切断する。AI 呼び出しは 55 秒で自前にタイムアウトさせ、
+// 基盤切断（ちょうど 60 秒）の手前でクリーンに止める。
+export const maxDuration = 60;
+
+const AI_TIMEOUT_MS = 55000;
+
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -36,7 +42,7 @@ async function callLlm(provider: Provider, systemText: string, userText: string)
                 system: systemText,
                 messages: [{ role: "user", content: userText }],
             }),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(AI_TIMEOUT_MS),
         });
         if (!res.ok) throw new Error(`Claude API error (${res.status}): ${await res.text().catch(() => "")}`);
         const data = await res.json() as { content?: Array<{ type: string; text?: string }>; usage?: { input_tokens?: number; output_tokens?: number } };
@@ -57,7 +63,7 @@ async function callLlm(provider: Provider, systemText: string, userText: string)
                     { role: "user", content: userText },
                 ],
             }),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(AI_TIMEOUT_MS),
         });
         if (!res.ok) throw new Error(`OpenAI API error (${res.status}): ${await res.text().catch(() => "")}`);
         const data = await res.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };

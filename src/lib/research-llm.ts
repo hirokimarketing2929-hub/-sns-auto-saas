@@ -14,7 +14,9 @@ const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
 
-const TIMEOUT_MS = 90000;
+// Vercel Hobby は関数を 60 秒で強制切断するため、基盤切断（原因不明の 504）より手前で
+// 自前にタイムアウトさせる。呼び出し側（generate route）は失敗時に通常生成へフォールバックする。
+const TIMEOUT_MS = 55000;
 
 // --- Anthropic（web_search サーバーツール） ---
 async function researchWithAnthropic(

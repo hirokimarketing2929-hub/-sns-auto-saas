@@ -61,6 +61,10 @@ export default function ResearchPage() {
     // @username or URL tab state
     const [targetInput, setTargetInput] = useState("");
     const [fetchedPost, setFetchedPost] = useState<FetchedPost | null>(null);
+    // 取得失敗時のインライン表示（トーストに加え、押下フィードバックを画面に残す）
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    // 取得失敗が X API 未連携（BYOK未登録）に起因するか。true なら設定画面への導線を出す。
+    const [fetchNeedsXApi, setFetchNeedsXApi] = useState(false);
 
     // 共通：ユーザー入力テーマ（書き換え時の必須入力）
     const [userTheme, setUserTheme] = useState("");
@@ -82,9 +86,14 @@ export default function ResearchPage() {
     const handleFetchPost = async () => {
         const v = targetInput.trim();
         if (!v) {
-            alert("@ユーザー名または投稿 URL を入力してください。");
+            setFetchError("@ユーザー名または投稿 URL を入力してください。");
+            setFetchNeedsXApi(false);
+            toast.error("@ユーザー名または投稿 URL を入力してください。");
             return;
         }
+        // 前回のフィードバックをクリアしてから実行
+        setFetchError(null);
+        setFetchNeedsXApi(false);
         try {
             setIsFetching(true);
             setResult(null);
@@ -97,13 +106,38 @@ export default function ResearchPage() {
             });
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.error || "取得に失敗しました。");
+                const serverMsg: string = errorData.error || "取得に失敗しました。";
+                // X API 未連携（BYOK 未登録）/ 認証エラーを判定して設定画面へ誘導する。
+                // - サーバは未登録時に 400 + 「X API キーが未登録です。…」を返す（fetch-post route 参照）
+                // - 401/403 や "X API エラー" 系も認証/権限不足の可能性が高いので導線を出す
+                const needsXApi =
+                    res.status === 401 ||
+                    res.status === 403 ||
+                    /X\s*API\s*キーが未登録|未登録|認証|Unauthorized|X API エラー/i.test(serverMsg);
+                throw new Error(serverMsg, { cause: { needsXApi } });
             }
             const data: FetchedPost = await res.json();
             setFetchedPost(data);
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
-            alert(`エラー: ${msg}`);
+            const needsXApi =
+                error instanceof Error &&
+                typeof error.cause === "object" &&
+                error.cause !== null &&
+                (error.cause as { needsXApi?: boolean }).needsXApi === true;
+            setFetchError(msg);
+            setFetchNeedsXApi(needsXApi);
+            if (needsXApi) {
+                toast.error("Xアカウントが未連携です", {
+                    description: "設定画面で X API キー（BYOK）を登録すると取得できます。",
+                    action: {
+                        label: "設定を開く",
+                        onClick: () => { window.location.href = "/dashboard/settings"; },
+                    },
+                });
+            } else {
+                toast.error("取得に失敗しました", { description: msg });
+            }
         } finally {
             setIsFetching(false);
         }
@@ -434,6 +468,28 @@ export default function ResearchPage() {
                                     <p className="text-xs text-slate-500">
                                         ※ 設定画面の X API キー（BYOK）で認証。非公開アカウントは取得できません。
                                     </p>
+
+                                    {/* 取得失敗時のインライン・フィードバック（押下しても無反応に見えないように画面へ残す） */}
+                                    {fetchError && (
+                                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-md flex gap-2 text-xs text-rose-900 leading-relaxed">
+                                            <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
+                                            <div className="space-y-1">
+                                                <p className="font-semibold">{fetchError}</p>
+                                                {fetchNeedsXApi && (
+                                                    <p>
+                                                        Xアカウントを連携してください（
+                                                        <a
+                                                            href="/dashboard/settings"
+                                                            className="font-bold underline text-rose-700 hover:text-rose-900 inline-flex items-center gap-0.5"
+                                                        >
+                                                            設定画面の X API キー <ExternalLink className="w-3 h-3" />
+                                                        </a>
+                                                        ）。
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* テーマ入力（書き換え時の必須入力） */}

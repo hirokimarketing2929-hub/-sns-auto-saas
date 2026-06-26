@@ -5,10 +5,16 @@ import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { suggestionHash } from "@/lib/analysis-hash";
 import { getActiveXAccountId } from "@/lib/active-x-account";
-import { resolveAIProvider } from "@/lib/ai-provider";
+import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
 
 // Claude / OpenAI を使って「直近 N 日のパフォーマンス」を自然言語で要約・助言する。
 // 出力は JSON: { headline, what_worked, what_didnt, next_moves: string[], tldr }
+
+// Vercel Hobby は関数を 60 秒で強制切断する。AI 呼び出しは 55 秒で自前にタイムアウトさせ、
+// 基盤切断による原因不明の 504 を避ける。
+export const maxDuration = 60;
+
+const AI_TIMEOUT_MS = 55000;
 
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -34,7 +40,7 @@ async function callClaude(p: Provider, systemText: string, userText: string): Pr
             system: systemText,
             messages: [{ role: "user", content: userText }],
         }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Claude API error (${res.status}): ${await res.text().catch(() => "")}`);
     const data = await res.json() as {
@@ -62,7 +68,7 @@ async function callOpenAI(p: Provider, systemText: string, userText: string): Pr
                 { role: "user", content: userText },
             ],
         }),
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`OpenAI API error (${res.status}): ${await res.text().catch(() => "")}`);
     const data = await res.json() as {
@@ -101,13 +107,13 @@ export async function POST(req: Request) {
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
         if (!settings) return NextResponse.json({ error: "設定情報が見つかりません" }, { status: 400 });
 
-        const provider: Provider | null = resolveAIProvider({
+        const resolved = resolveAIProvider({
             anthropicApiKey: settings.anthropicApiKey,
             openaiApiKey: settings.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
             openaiModel: OPENAI_MODEL,
         });
-        if (!provider) {
+        if (!resolved) {
             return NextResponse.json({
                 headline: "AI プロバイダの API キー未設定",
                 tldr: "設定画面から Anthropic または OpenAI の API キーを保存すると、AI 週次インサイトが使えます。",
@@ -117,6 +123,12 @@ export async function POST(req: Request) {
                 _fallback: true,
             });
         }
+        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
+        if (resolved.source === "env:anthropic") {
+            const cap = await checkOwnerKeyUsageCap(user.id);
+            if (!cap.ok) return ownerKeyCapResponse(cap);
+        }
+        const provider: Provider = resolved;
 
         const since = new Date();
         since.setDate(since.getDate() - rangeDays);

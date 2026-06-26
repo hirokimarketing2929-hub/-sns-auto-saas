@@ -58,6 +58,31 @@ export function isFeatureEnabled(key: FeatureKey): boolean {
     return !MVP_HIDDEN_FEATURES.includes(key);
 }
 
+// =============================================================================
+// BYOK（Bring Your Own Key）フィーチャーフラグ — 決定 #032 / task 011
+// =============================================================================
+//
+// 背景: β（クローズド）では「ユーザー自身の AI API キー登録（BYOK）」を OFF にし、
+//   AI 投稿生成は当社（オーナー）鍵 ANTHROPIC_API_KEY で提供する。BYOK の
+//   コード経路は **削除せず温存（dormant）** し、AI コスト暴走や Anthropic 側の
+//   制限など緊急時に env 1個で即 ON（再有効化）できる状態を保つ。
+//
+// 仕様（env: BYOK_ENABLED）:
+//   - 未設定 / "false" / 誤設定           → BYOK OFF（β既定）。
+//       * BYOK 入力 UI は非表示（コンポーネントは温存・条件レンダリングのみ）。
+//       * AI 生成はオーナー鍵フォールバックで常時稼働（mvp でも許可）。
+//       * 濫用ガード（1ユーザー当たり日次回数/コスト上限）でコスト頭打ち。
+//   - "true"（厳密一致）                    → BYOK ON（従来の「BYOK 必須」復活）。
+//       * BYOK 入力 UI 再表示。
+//       * mvp ではオーナー鍵フォールバック停止 ＝ ユーザーは自分の鍵が必須。
+//
+// 安全側の既定: getReleaseMode と同様、"true" 厳密一致のときだけ ON。
+//   設定漏れ・スペルミスはすべて OFF（＝当社鍵提供・濫用ガードあり）に倒れる。
+//   これにより「フラグ設定ミスで全ユーザーが鍵未設定→生成不能」を構造的に防ぐ。
+export function isByokEnabled(): boolean {
+    return process.env.BYOK_ENABLED?.trim() === "true";
+}
+
 /**
  * ルートガード用ヘルパー。無効な機能なら true を返す（呼び出し側で redirect する）。
  */

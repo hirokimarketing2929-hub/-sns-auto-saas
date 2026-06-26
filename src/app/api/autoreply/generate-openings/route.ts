@@ -5,11 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { errorResponse } from "@/lib/api-error";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
-import { resolveAIProvider } from "@/lib/ai-provider";
+import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
 
 // 自動リプライキャンペーン用「冒頭バリエーション」量産エンドポイント。
 // 同一テンプレを大量送信すると不自然＆スパム判定リスクが上がるため、
 // 共通CTA（replyContent）の前に置く 1〜2行の自然な導入文を最大100通り生成する。
+
+// Vercel Hobby は関数を 60 秒で強制切断する。AI 呼び出しは 55 秒で自前にタイムアウトさせ、
+// 基盤切断による原因不明の 504 を避けてクリーンなエラー応答を返す。
+export const maxDuration = 60;
+
+const AI_TIMEOUT_MS = 55000;
 
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -39,7 +45,7 @@ async function callClaude(args: { provider: Provider; systemText: string; userTe
             system: args.systemText,
             messages: [{ role: "user", content: args.userText }],
         }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -75,7 +81,7 @@ async function callOpenAI(args: { provider: Provider; systemText: string; userTe
                 { role: "user", content: args.userText },
             ],
         }),
-        signal: AbortSignal.timeout(120000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -144,17 +150,23 @@ export async function POST(req: Request) {
         }
 
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
-        const provider: Provider | null = resolveAIProvider({
+        const resolved = resolveAIProvider({
             anthropicApiKey: settings?.anthropicApiKey,
             openaiApiKey: settings?.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
             openaiModel: OPENAI_MODEL,
         });
-        if (!provider) {
+        if (!resolved) {
             return NextResponse.json({
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
             }, { status: 400 });
         }
+        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
+        if (resolved.source === "env:anthropic") {
+            const cap = await checkOwnerKeyUsageCap(user.id);
+            if (!cap.ok) return ownerKeyCapResponse(cap);
+        }
+        const provider: Provider = resolved;
 
         const systemText = [
             "あなたは X (Twitter) で自動リプライを送るときに使う「冒頭の一言」を量産するコピーライターです。",
@@ -202,6 +214,9 @@ export async function POST(req: Request) {
                 errorMessage: msg,
             });
             console.error("[generate-openings] LLM call failed:", msg);
+            if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+                return NextResponse.json({ error: "生成がタイムアウトしました。もう一度お試しください。" }, { status: 504 });
+            }
             return NextResponse.json({ error: "AI 呼び出しに失敗しました。時間をおいて再試行してください。" }, { status: 502 });
         }
 

@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
-import { resolveAIProvider } from "@/lib/ai-provider";
+import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -15,6 +15,13 @@ import { resolveAIProvider } from "@/lib/ai-provider";
 //   2. Settings.openaiApiKey   → OpenAI GPT
 //   3. サーバ環境変数 ANTHROPIC_API_KEY → Claude（開発者/オーナー用フォールバック）
 //   4. 何もなければエラー
+
+// Vercel Hobby は関数を 60 秒で強制切断する。各 AI 呼び出しは 55 秒で自前にタイムアウトさせ、
+// 基盤切断による原因不明の 504 を避ける。なお本ルートは Step1(抽出) → Step2(3軸並列穴埋め) の
+// 多段構成のため、各呼び出しは 55 秒で止まるが直列区間の合計が 60 秒を超える可能性は残る（要設計改善）。
+export const maxDuration = 60;
+
+const AI_TIMEOUT_MS = 55000;
 
 // ===== プロバイダ抽象化 =====
 
@@ -66,7 +73,7 @@ async function callClaude(args: LlmCallArgs): Promise<LlmResult> {
                 { role: "user", content: [{ type: "text", text: args.userText }] },
             ],
         }),
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -103,7 +110,7 @@ async function callOpenAI(args: LlmCallArgs): Promise<LlmResult> {
                 { role: "user", content: args.userText },
             ],
         }),
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
     });
     if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -528,6 +535,11 @@ export async function POST(req: Request) {
                 _used_theme: persona,
                 _user_theme: userTheme.trim(),
             }, { status: 200 });
+        }
+        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
+        if (resolved?.source === "env:anthropic") {
+            const cap = await checkOwnerKeyUsageCap(user.id);
+            if (!cap.ok) return ownerKeyCapResponse(cap);
         }
 
         const knowledge: KnowledgeBundle = {

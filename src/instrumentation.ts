@@ -49,6 +49,16 @@ export async function register() {
                     `招待ゲートが fail-closed で全員登録不可になります（意図的なら無視可）。`
                 );
             }
+            // BYOK フラグ（決定 #032）。OFF（β既定）では AI は当社鍵で提供するため
+            //   ANTHROPIC_API_KEY が未設定だと全員 AI 生成不能になる ＝ fail-fast 対象。
+            const byokOn = process.env.BYOK_ENABLED?.trim() === "true";
+            lines.push(`[startup] BYOK_ENABLED -> ${byokOn ? "ON（BYOK必須・mvpはユーザー鍵要）" : "OFF（当社鍵で提供・濫用ガードON）"}`);
+            if (!byokOn && (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.trim() === "")) {
+                lines.push(
+                    `[startup][ERROR] BYOK OFF かつ ANTHROPIC_API_KEY 未設定です。` +
+                    `当社鍵での AI 生成が全ユーザーで不能になります。本番では必須。`
+                );
+            }
         }
 
         // まとめて1回出力（ログ汚染を避ける）。

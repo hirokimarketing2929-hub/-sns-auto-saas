@@ -6,6 +6,7 @@ import { getActiveXAccount } from "@/lib/active-x-account";
 import { TwitterApi } from "twitter-api-v2";
 import { encryptSecret, maskSecret, isMaskedSentinel } from "@/lib/crypto";
 import { errorResponse } from "@/lib/api-error";
+import { isByokEnabled } from "@/lib/features";
 
 // Settings に保存される機微フィールド（at-rest 暗号化対象）。
 const SECRET_SETTINGS_FIELDS = [
@@ -71,6 +72,8 @@ export async function GET() {
             activeXAccountId: activeXAccount?.id ?? null,
             hasTwitterOAuth,
             twitterAccounts,
+            // BYOK フラグ（決定 #032）。OFF（β既定）のときフロントは BYOK 入力 UI を隠す。
+            byokEnabled: isByokEnabled(),
         };
         // RT-005: 機微フィールドは復号した平文を返さない。マスク表示（"設定済み"/末尾4桁）にする。
         // フロントは「設定済みか（locked 表示）」の判定にしか使わないため、平文は不要。

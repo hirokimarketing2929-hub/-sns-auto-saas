@@ -76,6 +76,9 @@ export default function SettingsPage() {
         chatworkRoomId: "",
         replyEngagementMinImp: "500",
     });
+    // BYOK フラグ（決定 #032）。OFF（β既定）のとき生成AIプロバイダの BYOK 入力 UI を隠す。
+    // サーバの /api/settings が byokEnabled を返す。既定 false（安全側）。
+    const [byokEnabled, setByokEnabled] = useState(false);
     const [cwTestState, setCwTestState] = useState<{ loading: boolean; text: string; type: "success" | "error" | "" }>({ loading: false, text: "", type: "" });
     // 認証情報フィールドの編集ロック解除状態（保存済みの値は既定でロックし「編集」で解除）
     const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
@@ -223,6 +226,7 @@ function prox_sign_(secret, message) {
                     chatworkRoomId: data.chatworkRoomId || "",
                     replyEngagementMinImp: String(data.replyEngagementMinImp ?? 500),
                 });
+                setByokEnabled(data.byokEnabled === true);
             }
         } catch (error) {
             console.error("Failed to fetch settings:", error);
@@ -376,7 +380,9 @@ function prox_sign_(secret, message) {
                         <div className="py-8 text-center text-gray-500">データを読み込み中...</div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* 生成AI プロバイダ（Claude / OpenAI） */}
+                            {/* 生成AI プロバイダ（Claude / OpenAI） — BYOK フラグ ON のときのみ表示（決定 #032）。
+                                OFF（β既定）では AI は当社鍵で提供するため入力欄を隠す。コンポーネントは温存。 */}
+                            {byokEnabled && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold">🤖 生成 AI プロバイダ API キー (BYOK)
                                     <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 align-middle">🌐 全アカ共通</span>
@@ -415,6 +421,7 @@ function prox_sign_(secret, message) {
                                     </div>
                                 </div>
                             </div>
+                            )}
 
                             <div className="space-y-4 pt-4 border-t">
                                 <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)
