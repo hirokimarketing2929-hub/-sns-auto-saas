@@ -6,6 +6,10 @@ import {
     Zap, Clock, Users, BarChart3, Tag, Bot, Target, Star,
 } from "lucide-react";
 import { PROLINE_DIRECT_URL } from "@/lib/proline";
+import { Noto_Sans_JP } from "next/font/google";
+
+// このLPだけ Noto Sans JP を適用（読みやすさ重視）。
+const notoSansJp = Noto_Sans_JP({ subsets: ["latin"], weight: ["400", "500", "700"], display: "swap" });
 
 // 最終CTAは /direct（LINE友だち追加に直行）に向けて成約までの摩擦を最小化する。
 const PROLINE_REGISTER_URL = PROLINE_DIRECT_URL;
@@ -32,7 +36,7 @@ const PROLINE_REGISTER_URL = PROLINE_DIRECT_URL;
  */
 export default function ProlineLpPage() {
     return (
-        <div className="-m-8 bg-white text-slate-900 min-h-[calc(100vh+4rem)]">
+        <div className={`${notoSansJp.className} -m-8 bg-white text-slate-900 min-h-[calc(100vh+4rem)]`}>
             <Hero />
             <ThreeMessages />
             <SectionWho />
@@ -66,16 +70,19 @@ function Hero() {
                     ProX Agent 公式推奨 — 無料LINE構築ツール No.1
                 </div>
 
-                <h1 className="mt-8 text-3xl md:text-5xl font-black tracking-tight leading-[1.35] md:leading-[1.3]">
-                    Xで集めたフォロワーを、<br />
-                    <span className="text-emerald-600 underline decoration-emerald-300 decoration-4 underline-offset-8">
-                        「買ってくれるお客様」
+                <h1 className="mt-8 tracking-tight text-slate-900 leading-[1.45]">
+                    <span className="block text-xl md:text-2xl font-medium">Xで集めたフォロワーを、</span>
+                    <span className="block my-1.5 text-3xl md:text-5xl font-bold text-emerald-600 underline decoration-emerald-300 decoration-4 underline-offset-[6px]">
+                        「買ってくれるお客様」に
                     </span>
-                    に変えて、<br />
-                    毎月 <span className="text-orange-500">&quot;放置するだけ&quot;</span> で商品が売れる——<br />
-                    そんな LINE自動化の仕組みづくりが、<br />
-                    <span className="text-emerald-600 text-4xl md:text-6xl">&quot;無料&quot;</span> ではじめられるとしたら、<br />
-                    <span className="text-slate-600 text-xl md:text-3xl font-bold">試してみる価値はあると思いませんか？</span>
+                    <span className="block text-xl md:text-3xl font-bold">
+                        変えて、毎月 <span className="text-orange-500">&quot;放置するだけ&quot;</span> で商品が売れる——
+                    </span>
+                    <span className="block mt-2 text-xl md:text-2xl font-medium">そんなLINE自動化の仕組みが、</span>
+                    <span className="block mt-1 text-xl md:text-3xl font-bold">
+                        <span className="text-4xl md:text-6xl font-black text-emerald-600 align-[-3px]">&quot;無料&quot;</span> ではじめられるとしたら、
+                    </span>
+                    <span className="block mt-2.5 text-lg md:text-2xl font-medium text-slate-600">試してみる価値はあると思いませんか？</span>
                 </h1>
 
                 <p className="mt-8 text-base md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
@@ -162,10 +169,24 @@ function SectionWho() {
                             <p className="text-slate-700 leading-relaxed">
                                 この話をしているのは、これまで <strong className="text-slate-900">累計1,500件以上のLINE自動化コンサル</strong> を行ってきた、リストマーケティングのプロです。
                             </p>
-                            <p className="text-slate-700 leading-relaxed">
-                                きれいごとを並べるつもりはありません。私は今日まで、業種も規模もバラバラのクライアントに、<strong className="text-slate-900">同じ1つの導線</strong> を入れてきました。
-                                そして、そのほとんどで結果が出ています。証拠を4つ、置いておきます。
-                            </p>
+                            <div className="text-left space-y-3 text-slate-700 leading-relaxed">
+                                <p>
+                                    全国で20人ほどしかいない <strong className="text-slate-900">プロライン認定コンサルタント</strong> として、40分29,700円のコンサルを <strong className="text-slate-900">累計1,500件以上</strong> 実施。
+                                </p>
+                                <div>
+                                    <p className="mb-2">実際のコンサル実績では、</p>
+                                    <ul className="space-y-1.5">
+                                        <li className="flex gap-2"><span className="text-emerald-500 font-bold">・</span><span>令和の虎の社長様（財務講座）：<strong className="text-slate-900">月250万円</strong>達成</span></li>
+                                        <li className="flex gap-2"><span className="text-emerald-500 font-bold">・</span><span>整体協会の会長様（施術＆経営講座）：<strong className="text-slate-900">月100〜300万円</strong>安定、単月ローンチ<strong className="text-slate-900">1,000万円</strong>達成</span></li>
+                                        <li className="flex gap-2"><span className="text-emerald-500 font-bold">・</span><span>オンライン卓球講座：<strong className="text-slate-900">月300万円</strong>達成</span></li>
+                                        <li className="flex gap-2"><span className="text-emerald-500 font-bold">・</span><span>元プロ野球選手：スポーツ教室のアカウント</span></li>
+                                    </ul>
+                                    <p className="mt-2">などを作成してきました。</p>
+                                </div>
+                                <p>
+                                    他にも <strong className="text-slate-900">月100アポを2年半以上</strong> 続け、累計 <strong className="text-slate-900">4,500件以上</strong> の経営者・個人事業主とお話ししてきたビジネスモデルのケース学習をもとに、事業戦略の策定・SNS運用コンサル・システム開発などを行っています。
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -785,7 +806,7 @@ function BigStat({ label, value, unit }: { label: string; value: string; unit: s
         <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-4 md:p-6 text-center">
             <p className="text-xs md:text-sm text-slate-500 mb-1">{label}</p>
             <div className="flex items-end justify-center gap-1 leading-none">
-                <span className="text-2xl md:text-5xl font-black text-emerald-600 tabular-nums">
+                <span className="text-xl md:text-5xl font-black text-emerald-600 tabular-nums whitespace-nowrap">
                     {value}
                 </span>
                 {unit && <span className="text-base md:text-lg text-slate-700 font-bold mb-1">{unit}</span>}
