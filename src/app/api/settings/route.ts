@@ -7,6 +7,8 @@ import { TwitterApi } from "twitter-api-v2";
 import { encryptSecret, maskSecret, isMaskedSentinel } from "@/lib/crypto";
 import { errorResponse } from "@/lib/api-error";
 import { isByokEnabled } from "@/lib/features";
+import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
+import { getFreeUsageStatus } from "@/lib/free-trial";
 
 // Settings に保存される機微フィールド（at-rest 暗号化対象）。
 const SECRET_SETTINGS_FIELDS = [
@@ -66,6 +68,17 @@ export async function GET() {
             for (const f of PERSONA_FIELDS) personaOverrides[f] = (activeXAccount as any)[f];
         }
 
+        // フリーミアム（決定 #033）の残回数情報。自鍵（復号して解決）が入っていれば usingOwnKey=true。
+        // 当社鍵利用者には本日の残り無料回数を返す（生成画面の吹き出し用）。
+        const resolvedProvider = resolveAIProviderFromSettings({
+            anthropicApiKey: settings.anthropicApiKey,
+            openaiApiKey: settings.openaiApiKey,
+            anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
+            openaiModel: process.env.OPENAI_MODEL || "gpt-4o",
+        });
+        const usingOwnKey = !!resolvedProvider && resolvedProvider.source !== "env:anthropic";
+        const freeStatus = await getFreeUsageStatus(user.id, usingOwnKey);
+
         const responseData = {
             ...(settings as any),
             ...personaOverrides,
@@ -74,6 +87,11 @@ export async function GET() {
             twitterAccounts,
             // BYOK フラグ（決定 #032）。OFF（β既定）のときフロントは BYOK 入力 UI を隠す。
             byokEnabled: isByokEnabled(),
+            // フリーミアム残回数（決定 #033）。
+            usingOwnKey: freeStatus.usingOwnKey,
+            freeRemaining: freeStatus.freeRemaining,
+            freeLimit: freeStatus.freeLimit,
+            resetsDaily: true,
         };
         // RT-005: 機微フィールドは復号した平文を返さない。マスク表示（"設定済み"/末尾4桁）にする。
         // フロントは「設定済みか（locked 表示）」の判定にしか使わないため、平文は不要。

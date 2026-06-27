@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { logLlmUsage } from "@/lib/api-usage";
+import { logLlmUsage, calculateLlmCost } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { researchGenerate } from "@/lib/research-llm";
-import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
-import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
+import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -164,8 +164,8 @@ function stripUrls(text: string): string {
 
 export async function POST(req: Request) {
     try {
-        // LLM 課金が走るため濫用ガード。
-        const limited = enforceRateLimit(`generate:${getClientIp(req)}`, 30, 60_000);
+        // LLM 課金が走るため濫用ガード（IP 単位の連打抑止・全 LLM route 共通ラッパ）。
+        const limited = enforceLlmRateLimit(req, "generate", 30, 60_000);
         if (limited) return limited;
 
         const session = await getServerSession(authOptions);
@@ -214,8 +214,8 @@ export async function POST(req: Request) {
         const winningRules = allKnowledges.filter(k => k.type === "WINNING").map(k => k.content);
         const losingRules = allKnowledges.filter(k => k.type === "LOSING").map(k => k.content);
 
-        // プロバイダ選択（BYOK フラグ: OFF時は当社鍵フォールバック許可、ON時は mvp で BYOK 必須）。research/direct 双方で使う。
-        const resolved = resolveAIProvider({
+        // プロバイダ選択（自鍵は復号してから解決）。research/direct 双方で使う。
+        const resolved = resolveAIProviderFromSettings({
             anthropicApiKey: settings.anthropicApiKey,
             openaiApiKey: settings.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
@@ -226,12 +226,23 @@ export async function POST(req: Request) {
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
             }, { status: 400 });
         }
-        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
-        if (resolved.source === "env:anthropic") {
-            const cap = await checkOwnerKeyUsageCap(user.id);
-            if (!cap.ok) return ownerKeyCapResponse(cap);
-        }
+        // フリーミアム（決定 #033）＋濫用ガード（#032）を共通ラッパで一括適用。
+        //   - 当社鍵（env:anthropic）利用時のみ「1日1枠」を atomic 予約（RT-015 TOCTOU 封鎖）＋ 24h キャップ。
+        //   - 自鍵（user:*）は無制限・予約なし（guard.finalize/release は no-op）。
+        // 予約は「生成の直前」に取り、研究/通常いずれの分岐でも finalize（成功）or release（全滅）する。
+        const usingOwnKey = resolved.source !== "env:anthropic";
         const provider: Provider = resolved;
+        const guardResult = await acquireOwnerKeyGuard({
+            userId: user.id,
+            usingOwnKey,
+            operation: enableResearch ? "generate-research" : "generate",
+            model: provider.model,
+        });
+        if (!guardResult.ok) return guardResult.response;
+        const guard = guardResult.guard;
+        // 生成成功後にレスポンスへ載せる「本日の残り無料回数」（自鍵時は UI 非表示用に freeLimit）。
+        const freeRemaining = guard.freeRemaining;
+        const freeLimit = guard.freeLimit;
 
         // リサーチモード ON: Render/Python 不要。設定の Anthropic/OpenAI キーで各社の web 検索ツールを使い、
         // 最新トレンドを調べてから投稿を生成する。失敗時は偽装せず direct-LLM パスへフォールバックし
@@ -260,21 +271,59 @@ export async function POST(req: Request) {
                 "最新トレンドを必ず web 検索で確認し、テーマに沿って今バズりやすい投稿を作ってください。",
             ].filter(Boolean).join("\n");
 
+            // RT-012: research 分岐は web_search（max_uses:5, max_tokens:1500）の追加課金が乗るため、
+            //   研究の成功・失敗いずれでも usage を必ず計上する（計上漏れで当社鍵を無制限消費させない）。
+            //   researchGenerate はトークンを返さないため、web_search コストを多めに概算で固定計上する。
+            //   出力 max_tokens=1500 ＋ web_search(最大5回)の入力増を見込み、保守的に input/output を大きめに置く。
+            const RESEARCH_EST_INPUT_TOKENS = 12000;  // web_search 結果の取り込み分を多めに見積もり
+            const RESEARCH_EST_OUTPUT_TOKENS = 1500;  // max_tokens 上限
+            const researchEstCost = calculateLlmCost(
+                provider.name,
+                provider.model,
+                RESEARCH_EST_INPUT_TOKENS,
+                RESEARCH_EST_OUTPUT_TOKENS,
+            );
             try {
                 const { content: rc, researchLog } = await researchGenerate(provider, researchSystem, researchUser);
                 const cleaned = stripUrls(rc);
                 if (cleaned.length > 0) {
+                    // 成功: 予約行を research 実績へ確定（当社鍵時のみ実体・自鍵は no-op）。
+                    await guard.finalize({
+                        provider: provider.name,
+                        operation: "generate-research",
+                        model: provider.model,
+                        inputTokens: RESEARCH_EST_INPUT_TOKENS,
+                        outputTokens: RESEARCH_EST_OUTPUT_TOKENS,
+                        costUsd: researchEstCost,
+                    });
                     return NextResponse.json({
                         content: cleaned,
                         platform: "X",
                         research_log: researchLog,
                         _engine: `research:${provider.name}`,
+                        freeRemaining,
+                        freeLimit,
+                        usingOwnKey,
                     });
                 }
                 researchUnavailable = true;
             } catch (e) {
                 researchUnavailable = true;
                 console.warn("research generation failed, falling back to direct LLM:", e instanceof Error ? e.message : e);
+            }
+            // 研究が失敗/空でも web_search コストは発生済み。漏れなく別行で計上する（RT-012）。
+            // ※ 予約行は後段の direct 生成で finalize されるため、ここは追加コストの独立ログとして残す。
+            if (researchUnavailable) {
+                await logLlmUsage({
+                    userId: user.id,
+                    provider: provider.name,
+                    operation: "generate-research-failed",
+                    model: provider.model,
+                    inputTokens: RESEARCH_EST_INPUT_TOKENS,
+                    outputTokens: RESEARCH_EST_OUTPUT_TOKENS,
+                    success: false,
+                    errorMessage: "research_unavailable (web_search cost charged)",
+                });
             }
         }
 
@@ -343,6 +392,10 @@ export async function POST(req: Request) {
         let content = "";
         let parseOk = false;
         let timedOut = false;
+        // 予約行（success=false プレースホルダ）への確定は最後に1回だけ行う。
+        // 失敗試行ぶんの追加コストは独立ログで漏れなく計上する。
+        let lastInputTokens = 0;
+        let lastOutputTokens = 0;
         for (const temp of [0.7, 0.85]) {
             try {
                 const llm = await callProvider({
@@ -352,15 +405,8 @@ export async function POST(req: Request) {
                     maxTokens: 1024,
                     temperature: temp,
                 });
-                // 成功・失敗に関わらず usage を記録（失敗時は errorMessage 付き）
-                await logLlmUsage({
-                    userId: user.id,
-                    provider: provider.name,
-                    operation: "generate",
-                    model: provider.model,
-                    inputTokens: llm.inputTokens,
-                    outputTokens: llm.outputTokens,
-                });
+                lastInputTokens = llm.inputTokens;
+                lastOutputTokens = llm.outputTokens;
                 const obj = safeJsonParse(llm.text) as { content?: unknown } | null;
                 if (obj && typeof obj.content === "string" && obj.content.trim().length > 0) {
                     // URL を後処理で強制除去（LLM がルール違反した場合の保険）
@@ -370,6 +416,17 @@ export async function POST(req: Request) {
                         break;
                     }
                 }
+                // パース失敗でも当社鍵コストは発生済み＝独立ログで計上（予約行は最後に finalize）。
+                await logLlmUsage({
+                    userId: user.id,
+                    provider: provider.name,
+                    operation: "generate-parse-failed",
+                    model: provider.model,
+                    inputTokens: llm.inputTokens,
+                    outputTokens: llm.outputTokens,
+                    success: false,
+                    errorMessage: "parse_failed",
+                });
             } catch (e) {
                 if (isTimeoutError(e)) timedOut = true;
                 console.warn(`generate attempt at temp ${temp} failed:`, e);
@@ -377,6 +434,8 @@ export async function POST(req: Request) {
         }
 
         if (!parseOk) {
+            // 生成が一切成功しなかった: 予約枠を解放して無料枠を焼かない（RT-015 整合）。
+            await guard.release();
             if (timedOut) {
                 return NextResponse.json({
                     error: "生成がタイムアウトしました。もう一度お試しください。"
@@ -387,10 +446,23 @@ export async function POST(req: Request) {
             }, { status: 502 });
         }
 
+        // 成功: 予約行を実績トークン/コストへ確定（当社鍵時のみ実体・自鍵は no-op）。
+        await guard.finalize({
+            provider: provider.name,
+            operation: "generate",
+            model: provider.model,
+            inputTokens: lastInputTokens,
+            outputTokens: lastOutputTokens,
+            costUsd: calculateLlmCost(provider.name, provider.model, lastInputTokens, lastOutputTokens),
+        });
+
         return NextResponse.json({
             content,
             platform: "X",
             _engine: `${provider.name}:${provider.model}`,
+            freeRemaining,
+            freeLimit,
+            usingOwnKey,
             // リサーチを要求されたがエンジンに繋がらず通常生成にフォールバックした場合に true。
             ...(researchUnavailable ? { research_unavailable: true } : {}),
         });

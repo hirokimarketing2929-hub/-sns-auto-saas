@@ -43,6 +43,13 @@ export default function GeneratePreviewPage() {
     const [researchLogs, setResearchLogs] = useState<ResearchLogEntry[]>([]);
     const [isResearching, setIsResearching] = useState(false);
 
+    // フリーミアム（決定 #033）：本日の無料 残回数 ＋ 超過ポップアップ
+    const [freeRemaining, setFreeRemaining] = useState<number | null>(null);
+    const [freeLimit, setFreeLimit] = useState<number | null>(null);
+    const [usingOwnKey, setUsingOwnKey] = useState(false);
+    const [byokModalOpen, setByokModalOpen] = useState(false);
+    const [byokModalMessage, setByokModalMessage] = useState("");
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -51,7 +58,13 @@ export default function GeneratePreviewPage() {
                 const settingsRes = await fetch(`/api/settings?t=${timestamp}`).catch(() => null);
                 if (settingsRes && settingsRes.ok) {
                     const settingsData = await settingsRes.json().catch(() => ({}));
-                    if (!settingsData.message) setUserSettings(settingsData);
+                    if (!settingsData.message) {
+                        setUserSettings(settingsData);
+                        // フリーミアム残回数（決定 #033）の初期表示。
+                        if (typeof settingsData.freeRemaining === "number") setFreeRemaining(settingsData.freeRemaining);
+                        if (typeof settingsData.freeLimit === "number") setFreeLimit(settingsData.freeLimit);
+                        setUsingOwnKey(settingsData.usingOwnKey === true);
+                    }
                 }
 
                 const knowledgeRes = await fetch(`/api/knowledge?t=${timestamp}`).catch(() => null);
@@ -121,10 +134,23 @@ export default function GeneratePreviewPage() {
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
+                // フリーミアム超過（402 byok_required）: ポップアップで BYOK 設定へ誘導（決定 #033）。
+                if (errData.error === "byok_required") {
+                    if (typeof errData.freeLimit === "number") setFreeLimit(errData.freeLimit);
+                    setFreeRemaining(0);
+                    setByokModalMessage(errData.message || "本日の無料分を使い切りました。続けて使うにはご自身のAPIキーを設定してください（明日また1回無料）。");
+                    setByokModalOpen(true);
+                    if (researchEnabled) setIsResearching(false);
+                    return;
+                }
                 throw new Error(errData.error || "AI サーバーのエラーが発生しました");
             }
 
             const data = await response.json();
+            // 生成成功: 残り無料回数を更新（自鍵利用中はバッジ非表示）。
+            if (typeof data.freeRemaining === "number") setFreeRemaining(data.freeRemaining);
+            if (typeof data.freeLimit === "number") setFreeLimit(data.freeLimit);
+            setUsingOwnKey(data.usingOwnKey === true);
 
             if (researchEnabled) {
                 // 仮の進行ログを実際の research_log で置き換える
@@ -302,6 +328,17 @@ export default function GeneratePreviewPage() {
                         />
                         Xの無料枠上限（140文字）に収める
                     </label>
+                    {/* フリーミアム残回数バッジ（決定 #033）。自鍵利用中は非表示。 */}
+                    {creationMode === "ai" && !usingOwnKey && freeRemaining !== null && (
+                        <div
+                            data-testid="free-remaining-badge"
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${freeRemaining > 0
+                                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                : "bg-amber-500/15 border-amber-500/30 text-amber-300"}`}
+                        >
+                            本日の無料 残り{freeRemaining}回{freeLimit !== null ? ` / ${freeLimit}` : ""}
+                        </div>
+                    )}
                     {creationMode === "ai" ? (
                         <Button
                             onClick={handleGenerate}
@@ -803,6 +840,43 @@ export default function GeneratePreviewPage() {
                     <p className="text-muted-foreground/50">
                         右上の「投稿を生成する」ボタンを押すと、AIが投稿を作成します。
                     </p>
+                </div>
+            )}
+
+            {/* フリーミアム超過ポップアップ（決定 #033）：BYOK 設定へ誘導 */}
+            {byokModalOpen && (
+                <div
+                    data-testid="byok-required-modal"
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+                    onClick={() => setByokModalOpen(false)}
+                >
+                    <div
+                        className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-2 mb-3">
+                            <Sparkles className="size-5 text-amber-300" />
+                            <h3 className="text-lg font-bold text-foreground">本日の無料分を使い切りました</h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+                            {byokModalMessage}
+                        </p>
+                        <div className="flex flex-col sm:flex-row justify-end gap-3">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setByokModalOpen(false)}
+                                className="text-muted-foreground hover:text-foreground"
+                            >
+                                閉じる
+                            </Button>
+                            <Button
+                                onClick={() => { window.location.href = "/dashboard/settings"; }}
+                                className="gradient-prox border-0 text-white rounded-xl px-5"
+                            >
+                                APIキーを設定する
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

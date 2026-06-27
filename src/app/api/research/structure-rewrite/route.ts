@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
-import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
+import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -460,6 +461,10 @@ async function generateOneVariant(opts: {
 
 export async function POST(req: Request) {
     try {
+        // RT-016: 連打抑止（このルートは1リクエストで最大7回の当社鍵呼び出しが走るため必須）。
+        const limited = enforceLlmRateLimit(req, "structure-rewrite", 30, 60_000);
+        if (limited) return limited;
+
         const session = await getServerSession(authOptions);
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -502,8 +507,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "設定情報が見つかりません。ナレッジ画面から AI 生成設定を保存してください。" }, { status: 400 });
         }
 
-        // プロバイダ選択（BYOK 必須化: 共通ロジックで mvp はオーナー鍵フォールバック停止）
-        const resolved = resolveAIProvider({
+        // プロバイダ選択（自鍵は復号してから解決）
+        const resolved = resolveAIProviderFromSettings({
             anthropicApiKey: settings.anthropicApiKey,
             openaiApiKey: settings.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
@@ -511,7 +516,9 @@ export async function POST(req: Request) {
         });
         const provider: Provider | null = resolved;
         const providerSource = resolved?.source ?? "none";
-        console.log(`[structure-rewrite] provider resolved: ${providerSource}, user-anthropic-len: ${settings.anthropicApiKey?.length ?? 0}, user-openai-len: ${settings.openaiApiKey?.length ?? 0}, env-anthropic: ${process.env.ANTHROPIC_API_KEY ? "set" : "unset"}`);
+        // RT-006: 鍵長・当社鍵(env)有無などのメタ情報はログに出さない（識別・総当たりの補助になるため）。
+        //   provider source 名のみに留める。
+        console.log(`[structure-rewrite] provider resolved: ${providerSource}`);
 
         // ペルソナ反映はオプトイン（applyPersonaToGeneration）。OFF時はターゲット/悩み/コンセプト/プロフィールを
         // 空にして特定ペルソナに寄せず、元バズ投稿の構造をそのまま活かす（CTA URL はリンクなので常に保持）。
@@ -536,11 +543,21 @@ export async function POST(req: Request) {
                 _user_theme: userTheme.trim(),
             }, { status: 200 });
         }
-        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
-        if (resolved?.source === "env:anthropic") {
-            const cap = await checkOwnerKeyUsageCap(user.id);
-            if (!cap.ok) return ownerKeyCapResponse(cap);
-        }
+        // フリーミアム（#033）＋濫用ガード（#032）を共通ラッパで一括適用（RT-015 atomic 予約 + 24h キャップ）。
+        //   （ここに到達した時点で provider != null ＝ resolved も非 null）。
+        //   本ルートは内部で最大7回の当社鍵呼び出しを行うが、暦日の無料「枠」は1。予約は1枠で取り、
+        //   個々の呼び出しコストは各 logLlmUsage が 24h キャップに反映する（多層防御）。
+        const usingOwnKey = resolved!.source !== "env:anthropic";
+        const guardResult = await acquireOwnerKeyGuard({
+            userId: user.id,
+            usingOwnKey,
+            operation: "research-structure-rewrite",
+            model: provider.model,
+        });
+        if (!guardResult.ok) return guardResult.response;
+        const guard = guardResult.guard;
+        const freeRemaining = guard.freeRemaining;
+        const freeLimit = guard.freeLimit;
 
         const knowledge: KnowledgeBundle = {
             base: allKnowledges.filter(k => k.type === "BASE").map(k => k.content),
@@ -574,6 +591,8 @@ export async function POST(req: Request) {
         }
 
         if (!extracted) {
+            // 生成（穴埋め）に到達せず失敗。予約枠を解放して無料枠を焼かない。
+            await guard.release();
             return NextResponse.json({
                 extracted_format: "",
                 extracted_emotion: "",
@@ -620,6 +639,8 @@ export async function POST(req: Request) {
         }
 
         if (variants.length === 0) {
+            // 1本も生成できなかった。予約枠を解放（個々の呼び出しコストは各 logLlmUsage 済で 24h キャップに反映）。
+            await guard.release();
             return NextResponse.json({
                 extracted_format: extracted.extracted_format,
                 extracted_emotion: extracted.extracted_emotion,
@@ -635,6 +656,17 @@ export async function POST(req: Request) {
             }, { status: 200 });
         }
 
+        // 成功: 暦日の無料「枠」を確定する。実コストは各 logLlmUsage（extract/fill-*）で計上済みのため、
+        //   予約行はトークン 0・コスト 0 で success=true 化し「本日1枠消費」のみを表す（二重課金を避ける）。
+        await guard.finalize({
+            provider: provider.name,
+            operation: "research-structure-rewrite",
+            model: provider.model,
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+        });
+
         return NextResponse.json({
             extracted_format: extracted.extracted_format,
             extracted_emotion: extracted.extracted_emotion,
@@ -645,6 +677,9 @@ export async function POST(req: Request) {
             _used_theme: persona,
             _user_theme: userTheme.trim(),
             _engine: `${provider.name}:${provider.model}`,
+            freeRemaining,
+            freeLimit,
+            usingOwnKey,
         });
     } catch (error) {
         console.error("structure-rewrite Error:", error);

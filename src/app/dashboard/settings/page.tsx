@@ -76,9 +76,8 @@ export default function SettingsPage() {
         chatworkRoomId: "",
         replyEngagementMinImp: "500",
     });
-    // BYOK フラグ（決定 #032）。OFF（β既定）のとき生成AIプロバイダの BYOK 入力 UI を隠す。
-    // サーバの /api/settings が byokEnabled を返す。既定 false（安全側）。
-    const [byokEnabled, setByokEnabled] = useState(false);
+    // BYOK 入力 UI は決定 #033 で常時表示（任意入力）になったため、byokEnabled による表示ガードは廃止。
+    // サーバの byokEnabled フラグはオーナー鍵フォールバック挙動の制御用としてサーバ側でのみ使用する。
     const [cwTestState, setCwTestState] = useState<{ loading: boolean; text: string; type: "success" | "error" | "" }>({ loading: false, text: "", type: "" });
     // 認証情報フィールドの編集ロック解除状態（保存済みの値は既定でロックし「編集」で解除）
     const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
@@ -226,7 +225,6 @@ function prox_sign_(secret, message) {
                     chatworkRoomId: data.chatworkRoomId || "",
                     replyEngagementMinImp: String(data.replyEngagementMinImp ?? 500),
                 });
-                setByokEnabled(data.byokEnabled === true);
             }
         } catch (error) {
             console.error("Failed to fetch settings:", error);
@@ -380,16 +378,26 @@ function prox_sign_(secret, message) {
                         <div className="py-8 text-center text-gray-500">データを読み込み中...</div>
                     ) : (
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* 生成AI プロバイダ（Claude / OpenAI） — BYOK フラグ ON のときのみ表示（決定 #032）。
-                                OFF（β既定）では AI は当社鍵で提供するため入力欄を隠す。コンポーネントは温存。 */}
-                            {byokEnabled && (
+                            {/* 生成AI プロバイダ（Claude / OpenAI）— 常時表示・任意入力（決定 #033）。
+                                自分の API キーを登録すると「1日1回無料」制度を卒業し、常に自分の鍵で無制限に使えます
+                                （当社鍵は一切消費しません）。未登録でも 1日1回は当社鍵で無料生成できます。 */}
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold">🤖 生成 AI プロバイダ API キー (BYOK)
+                                    <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 align-middle">任意</span>
                                     <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 align-middle">🌐 全アカ共通</span>
                                 </h3>
                                 <div className="bg-indigo-50 p-4 rounded-md border border-indigo-200">
                                     <p className="text-sm text-indigo-900 mb-1">
-                                        リサーチ画面の「構造を保持してテーマ置換」機能で使用する LLM プロバイダの API キーを登録します。
+                                        投稿生成・リサーチ等で使用する LLM プロバイダの API キーを登録します（任意）。
+                                    </p>
+                                    <p className="text-xs text-indigo-800 mb-2">
+                                        🎁 <span className="font-semibold">未登録でも 1日1回まで当社の AI で無料生成</span>できます。
+                                        ご自身のキーを登録すると<span className="font-semibold">1日1回の制限がなくなり、常にご自身のキーで無制限</span>に使えます
+                                        （費用はお客様の API 利用分のみ）。
+                                    </p>
+                                    <p className="text-[11px] text-indigo-700 mb-3 leading-relaxed">
+                                        ※ 入力されたキーは暗号化して安全に保管され、AI 生成のリクエストにのみ使用します。
+                                        いつでも削除・変更できます。登録をもって本取り扱いに同意したものとみなします。
                                     </p>
                                     <p className="text-xs text-indigo-700 mb-4">
                                         ※ Anthropic Claude が第一優先。どちらか一方を入力すれば動作します。両方入っている場合は Claude が使われます。
@@ -421,7 +429,6 @@ function prox_sign_(secret, message) {
                                     </div>
                                 </div>
                             </div>
-                            )}
 
                             <div className="space-y-4 pt-4 border-t">
                                 <h3 className="text-lg font-semibold">システム連携設定 (X/Twitter 自動投稿用)

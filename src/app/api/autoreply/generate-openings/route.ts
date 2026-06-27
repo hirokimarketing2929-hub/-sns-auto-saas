@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { errorResponse } from "@/lib/api-error";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
-import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { resolveAIProviderFromSettings, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { checkFreeDailyGate, byokRequiredResponse, remainingAfterGeneration } from "@/lib/free-trial";
 
 // 自動リプライキャンペーン用「冒頭バリエーション」量産エンドポイント。
 // 同一テンプレを大量送信すると不自然＆スパム判定リスクが上がるため、
@@ -150,7 +151,7 @@ export async function POST(req: Request) {
         }
 
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
-        const resolved = resolveAIProvider({
+        const resolved = resolveAIProviderFromSettings({
             anthropicApiKey: settings?.anthropicApiKey,
             openaiApiKey: settings?.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
@@ -161,12 +162,20 @@ export async function POST(req: Request) {
                 error: "AI プロバイダの API キーが未設定です。設定画面で Anthropic または OpenAI の API キーを保存してください。"
             }, { status: 400 });
         }
-        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
+        // フリーミアム（決定 #033）: 当社鍵利用時のみ「1日1回無料」ゲート。自鍵は無制限。
+        const usingOwnKey = resolved.source !== "env:anthropic";
+        const freeGate = await checkFreeDailyGate(user.id, usingOwnKey);
+        if (!freeGate.allowed) {
+            return byokRequiredResponse(freeGate.freeLimit);
+        }
+        // 濫用ガード（多層防御）: 当社鍵フォールバック時だけ 1ユーザー直近24h上限を内側で適用。
         if (resolved.source === "env:anthropic") {
             const cap = await checkOwnerKeyUsageCap(user.id);
             if (!cap.ok) return ownerKeyCapResponse(cap);
         }
         const provider: Provider = resolved;
+        const freeRemaining = remainingAfterGeneration(freeGate);
+        const freeLimit = freeGate.freeLimit;
 
         const systemText = [
             "あなたは X (Twitter) で自動リプライを送るときに使う「冒頭の一言」を量産するコピーライターです。",
@@ -250,7 +259,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "AI が有効なバリエーションを返しませんでした。" }, { status: 502 });
         }
 
-        return NextResponse.json({ openings, count: openings.length });
+        return NextResponse.json({ openings, count: openings.length, freeRemaining, freeLimit, usingOwnKey });
     } catch (error) {
         return errorResponse(error, "サーバーエラーが発生しました", 500, "generate-openings");
     }

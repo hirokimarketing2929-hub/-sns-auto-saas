@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { logLlmUsage } from "@/lib/api-usage";
 import { suggestionHash } from "@/lib/analysis-hash";
 import { getActiveXAccountId } from "@/lib/active-x-account";
-import { resolveAIProvider, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { resolveAIProviderFromSettings, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
+import { checkFreeDailyGate, byokRequiredResponse } from "@/lib/free-trial";
 
 // Claude / OpenAI を使って「直近 N 日のパフォーマンス」を自然言語で要約・助言する。
 // 出力は JSON: { headline, what_worked, what_didnt, next_moves: string[], tldr }
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
         const settings = await prisma.settings.findUnique({ where: { userId: user.id } });
         if (!settings) return NextResponse.json({ error: "設定情報が見つかりません" }, { status: 400 });
 
-        const resolved = resolveAIProvider({
+        const resolved = resolveAIProviderFromSettings({
             anthropicApiKey: settings.anthropicApiKey,
             openaiApiKey: settings.openaiApiKey,
             anthropicModel: ANTHROPIC_MODEL,
@@ -123,7 +124,13 @@ export async function POST(req: Request) {
                 _fallback: true,
             });
         }
-        // 濫用ガード: 当社鍵フォールバック（BYOK OFF）のときだけ 1ユーザー日次上限を適用。
+        // フリーミアム（決定 #033）: 当社鍵利用時のみ「1日1回無料」ゲート。自鍵は無制限。
+        const usingOwnKey = resolved.source !== "env:anthropic";
+        const freeGate = await checkFreeDailyGate(user.id, usingOwnKey);
+        if (!freeGate.allowed) {
+            return byokRequiredResponse(freeGate.freeLimit);
+        }
+        // 濫用ガード（多層防御）: 当社鍵フォールバック時だけ 1ユーザー直近24h上限を内側で適用。
         if (resolved.source === "env:anthropic") {
             const cap = await checkOwnerKeyUsageCap(user.id);
             if (!cap.ok) return ownerKeyCapResponse(cap);

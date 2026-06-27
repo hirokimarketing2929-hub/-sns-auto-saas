@@ -19,6 +19,7 @@
 // 各 route はモデル名を env から個別に解決しているため、モデルは引数で受け取る。
 
 import { getReleaseMode, isByokEnabled } from "@/lib/features";
+import { decryptSecret } from "@/lib/crypto";
 
 export type ResolvedProvider = {
     name: "anthropic" | "openai";
@@ -48,8 +49,47 @@ export function isOwnerKeyFallbackAllowed(): boolean {
 }
 
 /**
+ * BYOK 鍵（Settings.anthropicApiKey / openaiApiKey）は at-rest で AES-256-GCM 暗号化されて
+ * いるため、resolveAIProvider に渡す前に必ずこの関数で復号する。
+ *
+ * 【重大バグ修正 / task 013-5】これまで各 route は暗号化済み（"enc:v1:..."）の文字列を
+ * そのまま resolveAIProvider に渡しており、自鍵（BYOK）利用時に暗号文を API キーとして
+ * 送ってしまい必ず認証失敗していた。本関数を通すことで自鍵生成が正しく機能する。
+ *
+ * decryptSecret は平文（enc:v1: 以外）はそのまま返す（移行期グレース）ため、平文保存・
+ * 暗号化保存のどちらでも安全に通せる。復号失敗（改ざん・鍵不一致）は throw されるので、
+ * 呼び出し側は「自鍵が壊れている」とみなして当社鍵フォールバックに倒すことを推奨する。
+ */
+export function resolveAIProviderFromSettings(input: ResolveProviderInput): ResolvedProvider | null {
+    let anthropic: string | null | undefined = input.anthropicApiKey;
+    let openai: string | null | undefined = input.openaiApiKey;
+    try {
+        anthropic = decryptSecret(input.anthropicApiKey) ?? null;
+    } catch (e) {
+        // 自鍵の復号に失敗（鍵不一致・改ざん等）。その鍵は無効として無視し、当社鍵フォールバックに委ねる。
+        console.warn("[ai-provider] anthropicApiKey decrypt failed; ignoring user key:", e instanceof Error ? e.message : e);
+        anthropic = null;
+    }
+    try {
+        openai = decryptSecret(input.openaiApiKey) ?? null;
+    } catch (e) {
+        console.warn("[ai-provider] openaiApiKey decrypt failed; ignoring user key:", e instanceof Error ? e.message : e);
+        openai = null;
+    }
+    return resolveAIProvider({
+        anthropicApiKey: anthropic,
+        openaiApiKey: openai,
+        anthropicModel: input.anthropicModel,
+        openaiModel: input.openaiModel,
+    });
+}
+
+/**
  * AI プロバイダを解決する。BYOK を優先し、mvp ではオーナー鍵フォールバックを停止する。
  * 解決できなければ null（＝呼び出し側で「キー未設定」エラーを返す想定）。
+ *
+ * 注意: 入力の anthropicApiKey/openaiApiKey は「復号済みの平文」であること。
+ *   暗号化された Settings の値を直接渡してはいけない（resolveAIProviderFromSettings を使う）。
  */
 export function resolveAIProvider(input: ResolveProviderInput): ResolvedProvider | null {
     const userAnthropic = input.anthropicApiKey?.trim();

@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getTwitterClient } from "@/lib/twitter";
 import { sendChatworkMessage } from "@/lib/chatwork";
 import { logXApiUsage, logLlmUsage } from "@/lib/api-usage";
-import { resolveAIProvider } from "@/lib/ai-provider";
+import { resolveAIProviderFromSettings, type ResolvedProvider } from "@/lib/ai-provider";
+import { assertCronAuthorized } from "@/lib/cron-auth";
+import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
 
 // リプ回り半自動化：
 //   1. アクティブなターゲットアカウントの最新ポストを X API で取得
@@ -148,9 +150,11 @@ function formatChatworkMessage(args: {
     return lines.join("\n");
 }
 
-async function resolveProvider(userId: string): Promise<Provider | null> {
+// source 付きで返す（POST 側でフリーミアム gate の usingOwnKey 判定に使う）。
+async function resolveProvider(userId: string): Promise<ResolvedProvider | null> {
     const settings = await prisma.settings.findUnique({ where: { userId } });
-    return resolveAIProvider({
+    // 自鍵（BYOK）は at-rest 暗号化されているため復号してから解決する（task 013-5 のバグ修正と一貫）。
+    return resolveAIProviderFromSettings({
         anthropicApiKey: settings?.anthropicApiKey,
         openaiApiKey: settings?.openaiApiKey,
         anthropicModel: ANTHROPIC_MODEL,
@@ -375,7 +379,13 @@ async function processUser(userId: string): Promise<{ suggested: number; notifie
 }
 
 // 手動トリガー（ログイン必須、自分のユーザーのみ処理）
-export async function POST() {
+export async function POST(req: Request) {
+    // RT-013: このルートは当社鍵で LLM 生成（リプ3案）を回し、かつ ChatWork へ自動送信する。
+    //   generate と同一ポリシー（rate-limit + フリーミアム gate + 24h キャップ）を適用する。
+    //   ① 連打抑止
+    const limited = enforceLlmRateLimit(req, "reply-engage", 10, 60_000);
+    if (limited) return limited;
+
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -383,16 +393,49 @@ export async function POST() {
     const user = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const result = await processUser(user.id);
-    return NextResponse.json(result);
+    // ② 当社鍵か自鍵かを解決し、当社鍵時はフリーミアム枠を atomic 予約＋24h キャップ。
+    //    自鍵未設定（＝当社鍵にフォールバック）で本日枠を使い切っていれば byok_required(402) で弾く。
+    const provider = await resolveProvider(user.id);
+    if (!provider) {
+        return NextResponse.json({ error: "AI プロバイダの API キーが未設定です。設定画面で API キーを保存してください。" }, { status: 400 });
+    }
+    const usingOwnKey = provider.source !== "env:anthropic";
+    const guardResult = await acquireOwnerKeyGuard({
+        userId: user.id,
+        usingOwnKey,
+        operation: "reply-engagement-generate",
+        model: provider.model,
+    });
+    if (!guardResult.ok) return guardResult.response;
+    const guard = guardResult.guard;
+
+    try {
+        const result = await processUser(user.id);
+        // 1件でも提案を生成（＝当社鍵で LLM を実行）したら枠を確定。0件なら枠を解放（無料枠を焼かない）。
+        if (result.suggested > 0) {
+            await guard.finalize({
+                provider: provider.name,
+                operation: "reply-engagement-generate",
+                model: provider.model,
+                inputTokens: 0,
+                outputTokens: 0,
+                costUsd: 0,
+            });
+        } else {
+            await guard.release();
+        }
+        return NextResponse.json(result);
+    } catch (e) {
+        await guard.release();
+        throw e;
+    }
 }
 
 // cron 用（全ユーザーをループ）
 export async function GET(req: Request) {
-    const authHeader = req.headers.get("authorization");
-    if (process.env.NODE_ENV === "production" && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    // RT-014: 全環境で CRON_SECRET 必須（fail-closed）。NODE_ENV 限定の旧ガードを撤廃。
+    const denied = assertCronAuthorized(req);
+    if (denied) return denied;
 
     // ChatWork が設定済みかつターゲットを持つユーザーを対象
     const users = await prisma.user.findMany({

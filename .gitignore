@@ -38,6 +38,16 @@ scripts-check_*.mjs
 .env*
 !.env.example
 
+# secrets — 絶対にコミットしない（平文APIキー等）
+new-key.txt
+*-key.txt
+*.key
+secret*.txt
+
+# local dev config / security-e2e build artifacts
+.claude/
+.next-sec-e2e/
+
 # vercel
 .vercel
 
