@@ -11,24 +11,24 @@ import { PROLINE_DIRECT_URL } from "@/lib/proline";
 const PROLINE_REGISTER_URL = PROLINE_DIRECT_URL;
 
 /**
- * /dashboard/proline ランディングページ。
+ * /dashboard/proline ランディングページ（コピー v4 反映版）。
  *
  * デザインテイスト: autosns.jp 系 (プロラインフリー本家LP)
- *   - 白基調 + LINE緑 (emerald) アクセント
- *   - 巨大数字 (0円・無制限) でスキャナビリティ重視
- *   - 機能カード × グリッド、お客様の声、比較表、FAQ
- *   - 親しみやすく堅実なトーン
+ *   - 白基調 + LINE緑 (emerald) アクセント / 巨大数字でスキャナビリティ重視
+ *   - 機能カード × グリッド、実績カルーセル、声、比較表、FAQ
+ *   - スマホ: 1カラム & 横スクロールのカルーセル / PC: グリッド
  *
- * 隠れ構造: 加藤将太「説得の価値観9」を順番通り埋め込み (顧客には見せない)
- *   1. 興味性・新規性          → Hero (2→4億 + 三大メッセージ)
- *   2. 目的・信念・自己開示    → "申し遅れました" 制作者紹介
- *   3. 夢・憧れ                → 朝の決済通知シーン (LF9: 快適/家族/お金)
- *   4. 恐怖・問題提起          → X単体運用の3つの壁
- *   5. ノウハウ・解決策        → 「足りなかったのは1つだけ」
- *   6. メリット                → 8つの機能 (LF9 紐付け) + ¥0 強調
- *   7. 限定性・緊急性          → 機会損失の可視化
- *   8. 不信の払拭・Q&A         → 顧客事例 + 比較表 + FAQ
- *   9. 後押し                  → 最終CTA + 感情訴求
+ * 構成（感情の波）:
+ *   1. フック(問いかけ)        → Hero
+ *   2. 自己開示 + 実績4枚       → SectionWho + 実績カルーセル
+ *   3. 未来(事業者/副業の2軸)   → SectionDream
+ *   4. 問題提起(3つの壁)        → SectionFear
+ *   5. 解決(1つだけ + 3STEP)    → SectionAnswer
+ *   6. 機能                     → SectionFeatures
+ *   7. 声(その後の変化)         → SectionTestimonials
+ *   8. 比較表 / 緊急性 / FAQ    → SectionCompare / SectionUrgency / SectionFaq
+ *   9. クロージング             → SectionFinal
+ *  10. 既存ユーザー(KPI予告)    → ExistingUserNote
  */
 export default function ProlineLpPage() {
     return (
@@ -44,6 +44,7 @@ export default function ProlineLpPage() {
             <SectionCompare />
             <SectionUrgency />
             <SectionFaq />
+            <SectionConsult />
             <SectionFinal />
             <ExistingUserNote />
         </div>
@@ -51,7 +52,7 @@ export default function ProlineLpPage() {
 }
 
 /* =============================================================
- * 1. Hero — 興味性・新規性
+ * 1. Hero — フック（問いかけ）
  * ============================================================= */
 function Hero() {
     return (
@@ -62,24 +63,30 @@ function Hero() {
                 {/* 信頼バッジ */}
                 <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide">
                     <Star className="size-3.5 fill-emerald-500 text-emerald-500" />
-                    ProX Agent 公式推奨 — LINE構築ツール No.1
+                    ProX Agent 公式推奨 — 無料LINE構築ツール No.1
                 </div>
 
-                <h1 className="mt-8 text-4xl md:text-6xl font-black tracking-tight leading-[1.2]">
+                <h1 className="mt-8 text-3xl md:text-5xl font-black tracking-tight leading-[1.35] md:leading-[1.3]">
                     Xで集めたフォロワーを、<br />
                     <span className="text-emerald-600 underline decoration-emerald-300 decoration-4 underline-offset-8">
-                        "買ってくれるお客様"
+                        「買ってくれるお客様」
                     </span>
-                    に変える。
+                    に変えて、<br />
+                    毎月 <span className="text-orange-500">&quot;放置するだけ&quot;</span> で商品が売れる——<br />
+                    そんな LINE自動化の仕組みづくりが、<br />
+                    <span className="text-emerald-600 text-4xl md:text-6xl">&quot;無料&quot;</span> ではじめられるとしたら、<br />
+                    <span className="text-slate-600 text-xl md:text-3xl font-bold">試してみる価値はあると思いませんか？</span>
                 </h1>
 
-                <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-                    顧問先・加藤さんが <span className="text-orange-500 font-bold">年商を2倍</span> にした追加施策は、
-                    たった1つ。しかも <span className="text-emerald-600 font-bold">完全無料</span> です。
+                <p className="mt-8 text-base md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
+                    ProX開発者・吉留大貴が、
+                    <span className="text-orange-500 font-bold">月100万円以上を売り上げるクライアントを量産</span>
+                    してきたLINE自動化の仕組みを、あなたも
+                    <span className="text-emerald-600 font-bold">&quot;無料&quot;</span> で手に入れませんか？
                 </p>
 
                 {/* 巨大ベネフィット数字 */}
-                <div className="mt-12 grid grid-cols-3 gap-4 max-w-2xl mx-auto">
+                <div className="mt-12 grid grid-cols-3 gap-3 md:gap-4 max-w-2xl mx-auto">
                     <BigStat label="月額" value="0" unit="円" />
                     <BigStat label="送信通数" value="無制限" unit="" />
                     <BigStat label="クレカ" value="不要" unit="" />
@@ -92,10 +99,10 @@ function Hero() {
                     </p>
                 </div>
 
-                {/* 信頼性: メディア掲載風 */}
+                {/* 信頼性ストリップ */}
                 <div className="mt-16 pt-8 border-t border-slate-200">
-                    <p className="text-xs text-slate-500 tracking-widest uppercase mb-4">
-                        次世代起業家育成セミナー公式採用 / 月商1,000万円以上の利用実績多数
+                    <p className="text-xs text-slate-500 tracking-wide mb-4 leading-relaxed">
+                        連携10万アカウント以上 / インフルエンサーから大阪王将まで導入している無料LINE自動化ツール
                     </p>
                 </div>
             </div>
@@ -104,7 +111,7 @@ function Hero() {
 }
 
 /* =============================================================
- * 三大メッセージバナー (再強調)
+ * 三大メッセージバナー
  * ============================================================= */
 function ThreeMessages() {
     return (
@@ -121,23 +128,24 @@ function ThreeMessages() {
 }
 
 /* =============================================================
- * 2. 自己開示 — 申し遅れました
+ * 2. 自己開示 + 実績カルーセル
  * ============================================================= */
 function SectionWho() {
     return (
         <section className="py-20 md:py-28 bg-white">
-            <div className="max-w-4xl mx-auto px-6">
+            <div className="max-w-5xl mx-auto px-6">
                 <div className="text-center mb-12">
                     <p className="text-emerald-600 text-sm tracking-widest font-bold uppercase mb-3">
                         申し遅れました
                     </p>
-                    <h2 className="text-3xl md:text-4xl font-bold text-slate-900 leading-tight">
+                    <h2 className="text-2xl md:text-4xl font-bold text-slate-900 leading-tight">
                         この話をしているのは、<br />
-                        <span className="text-emerald-600">毎月実際にやっている人間</span>です。
+                        1,500件以上を見てきた<br className="md:hidden" />
+                        <span className="text-emerald-600">&quot;リストマーケティングのプロ&quot;</span>です。
                     </h2>
                 </div>
 
-                <div className="bg-slate-50 rounded-3xl p-8 md:p-12 border border-slate-100">
+                <div className="max-w-4xl mx-auto bg-slate-50 rounded-3xl p-8 md:p-12 border border-slate-100">
                     <div className="flex flex-col md:flex-row items-start gap-8">
                         <div className="flex-shrink-0 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-3xl font-bold mx-auto md:mx-0">
                             吉
@@ -148,34 +156,35 @@ function SectionWho() {
                                     吉留 大貴
                                 </h3>
                                 <p className="text-slate-500 text-sm mt-1">
-                                    ProX Agent 開発者 / コンテンツ販売 × LINE自動化 月商1,000万円
+                                    ProX 開発者 / プロライン認定コンサルタント（有料指名1位・お客様満足度1位の実績あり）
                                 </p>
                             </div>
                             <p className="text-slate-700 leading-relaxed">
-                                顧問先の経営者・加藤さんは、私が提案した同じ導線を導入後、
-                                年商を <strong className="text-orange-500">2億 → 4億</strong> に倍増させました。
+                                この話をしているのは、これまで <strong className="text-slate-900">累計1,500件以上のLINE自動化コンサル</strong> を行ってきた、リストマーケティングのプロです。
                             </p>
                             <p className="text-slate-700 leading-relaxed">
-                                机上論ではなく、自分のビジネスでも顧問先でも毎月証明している仕組みを、
-                                今日あなたにそのままお渡しします。
-                            </p>
-                            <p className="text-slate-600 text-sm leading-relaxed bg-emerald-50 border-l-4 border-emerald-400 px-4 py-3 rounded-r">
-                                ProX Agent を無料で配っている理由はシンプルです。<br />
-                                <span className="text-slate-900 font-semibold">
-                                    コンテンツ販売者を、消耗から解放したいから。
-                                </span>
+                                きれいごとを並べるつもりはありません。私は今日まで、業種も規模もバラバラのクライアントに、<strong className="text-slate-900">同じ1つの導線</strong> を入れてきました。
+                                そして、そのほとんどで結果が出ています。証拠を4つ、置いておきます。
                             </p>
                         </div>
                     </div>
                 </div>
+
+                {/* 実績カルーセル: スマホ=横スクロール / PC=4カラム */}
+                <div className="mt-10 flex md:grid md:grid-cols-4 gap-4 overflow-x-auto md:overflow-visible snap-x snap-mandatory pb-4 md:pb-0 -mx-6 px-6 md:mx-0 md:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <AchievementCard name="整体協会の会長様" tag="整体×経営の講座" value="月100〜300万" note="＋ローンチ単月1,000万" />
+                    <AchievementCard name="令和の虎の社長様" tag="財務の講座" value="月250万" note="完全自動で販売" />
+                    <AchievementCard name="オンライン卓球教室" tag="動画完結型の講座" value="月300万" note="オンライン完結で販売" />
+                    <AchievementCard name="元プロ野球選手の教室" tag="スポーツ教室" value="ゼロから構築" note="立ち上げを支援" />
+                </div>
+                <p className="mt-4 text-center text-slate-400 text-xs md:hidden">← 横にスワイプ →</p>
             </div>
         </section>
     );
 }
 
 /* =============================================================
- * 3. 夢・憧れ — 朝の決済通知
- * LF9: 快適 / 家族 / お金
+ * 3. 未来 — 事業者 / 副業 の2軸
  * ============================================================= */
 function SectionDream() {
     return (
@@ -185,28 +194,30 @@ function SectionDream() {
                     <p className="text-orange-500 text-sm tracking-widest font-bold uppercase mb-3">
                         想像してみてください
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
-                        朝、コーヒーを淹れる前に開いたスマホに、<br />
-                        <span className="text-emerald-600">昨晩の決済通知が3件</span>。
+                    <h2 className="text-2xl md:text-4xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+                        あなたが手を動かさなくても、<br />
+                        商品が売れて、<span className="text-emerald-600">&quot;自由な時間&quot;が増えていく</span>毎日を。
                     </h2>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-6">
                     <DreamCard
+                        eyebrow="事業者の方へ"
                         icon={<Clock className="size-6" />}
-                        title="平日の夜が、家族のもとに"
-                        body="深夜まで PC に向かう生活が終わり、子供と食卓を囲める時間が戻ってくる。あなたが本当に大切にしたかった『当たり前』が日常に。"
+                        title="セールスの苦悩から、解放される"
+                        body="DM対応、ローンチ、価格説明——そのたびに削られていた時間。「自分が動かないと売上が止まる」という一人社長の限界。それを仕組みが丸ごと肩代わりします。空いた時間で、商品改善・採用・戦略といった“本来やるべき仕事”に、ようやく集中できる。"
                     />
                     <DreamCard
+                        eyebrow="副業の方へ"
                         icon={<Sparkles className="size-6" />}
-                        title="休日も、寝ている間も"
-                        body="温泉に入っている間にも、旅先で寝ている間にも、仕組みが代わりに売上を生み続ける。経済的な余裕と時間の自由が同時に手に入る。"
+                        title="時間を売らずに、収益が積み上がる"
+                        body="本業の合間も、眠っている間も、通勤中も、仕組みが代わりに教育と販売を回し続ける。時間を切り売りせず、自由な時間を持ったまま、自動収益がコツコツ育っていく。「働いた分だけ」の世界から、静かに抜け出せます。"
                     />
                 </div>
 
                 <p className="mt-12 text-center text-slate-600 max-w-2xl mx-auto leading-relaxed">
                     フォロワー数を毎日眺めている人と、この絵の中で生きている人の差は、<br />
-                    <span className="text-slate-900 font-bold">才能ではなく、仕組みの有無だけ</span>です。
+                    <span className="text-slate-900 font-bold">才能ではなく、&quot;仕組み&quot;の有無だけ</span>です。
                 </p>
             </div>
         </section>
@@ -214,7 +225,7 @@ function SectionDream() {
 }
 
 /* =============================================================
- * 4. 恐怖・問題提起
+ * 4. 問題提起
  * ============================================================= */
 function SectionFear() {
     return (
@@ -224,7 +235,7 @@ function SectionFear() {
                     <p className="text-rose-500 text-sm tracking-widest font-bold uppercase mb-3">
                         ここで現実の話をします
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
                         X運用『だけ』では、<br />
                         <span className="text-rose-500">売上は構造的に上がりません。</span>
                     </h2>
@@ -273,7 +284,7 @@ function SectionFear() {
 }
 
 /* =============================================================
- * 5. ノウハウ・解決策
+ * 5. 解決
  * ============================================================= */
 function SectionAnswer() {
     return (
@@ -283,7 +294,7 @@ function SectionAnswer() {
                     <p className="text-emerald-600 text-sm tracking-widest font-bold uppercase mb-3">
                         では、足りないものは何か
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
                         足りなかったのは、<br />
                         <span className="text-emerald-600">たった1つだけ。</span>
                     </h2>
@@ -315,7 +326,7 @@ function SectionAnswer() {
                     />
                     <FunnelStage
                         phase="STEP 3"
-                        tool="プロラインフリー"
+                        tool="セールス or 自動販売"
                         target="決済"
                         body="教育が終わったタイミングでオファー配信。決済リンクまで一気に到達。寝ている間も売上が立つ。"
                         color="from-orange-50 to-amber-50"
@@ -326,7 +337,7 @@ function SectionAnswer() {
                 <div className="mt-10 text-center">
                     <p className="text-slate-700 leading-relaxed max-w-2xl mx-auto mb-6">
                         この3ステップが <strong className="text-slate-900">毎日24時間、自動で回り続ける</strong>。<br />
-                        加藤さんの年商を 2億 → 4億 に押し上げた仕組みの正体です。
+                        これが、<strong className="text-slate-900">月100万円以上のクライアントを量産してきた仕組み</strong>の正体です。
                     </p>
                     <CtaSecondary />
                 </div>
@@ -336,7 +347,7 @@ function SectionAnswer() {
 }
 
 /* =============================================================
- * 6. メリット — 8つの機能
+ * 6. 機能
  * ============================================================= */
 function SectionFeatures() {
     return (
@@ -346,7 +357,7 @@ function SectionFeatures() {
                     <p className="text-emerald-600 text-sm tracking-widest font-bold uppercase mb-3">
                         プロラインフリーで手に入る機能
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight">
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight">
                         他社なら<span className="text-orange-500">月3万円〜</span>の機能が、<br />
                         全部 <span className="text-emerald-600 font-mono">¥0</span> で使える。
                     </h2>
@@ -388,11 +399,6 @@ function SectionFeatures() {
                         title="リッチメッセージ"
                         body="画像・動画・カードでクリック率を大幅向上。ステップ配信の中で自由に使える。"
                     />
-                    <FeatureCard
-                        icon={<Sparkles className="size-6" />}
-                        title="販売台本テンプレ"
-                        body="成約率の高い『教育→販売』シナリオが標準搭載。コピペで使える完成品。"
-                    />
                 </div>
 
                 <p className="mt-10 text-center text-slate-500 text-sm">
@@ -404,7 +410,7 @@ function SectionFeatures() {
 }
 
 /* =============================================================
- * 顧客の声 (信頼補強)
+ * 7. お客様の声（その後の変化・ストーリー）
  * ============================================================= */
 function SectionTestimonials() {
     return (
@@ -414,38 +420,32 @@ function SectionTestimonials() {
                     <p className="text-emerald-600 text-sm tracking-widest font-bold uppercase mb-3">
                         導入された方の声
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight">
-                        実際に成果が出ている事例。
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight">
+                        仕組みを入れたあと、何が変わったか。
                     </h2>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-6">
                     <Testimonial
-                        avatar="加"
-                        avatarBg="from-orange-400 to-rose-500"
-                        name="加藤さん"
-                        role="経営者 / 顧問先"
-                        result="2億 → 4億"
-                        resultLabel="年商の推移"
-                        body="X運用は数年前からやっていましたが、売上が伸び悩んでいました。プロラインフリーでの教育導線を組んでから、半年で売上が倍になりました。"
-                    />
-                    <Testimonial
-                        avatar="吉"
+                        avatar="整"
                         avatarBg="from-emerald-400 to-teal-500"
-                        name="吉留さん"
-                        role="本ページ作者 / コンテンツ販売"
-                        result="月1,000万円"
-                        resultLabel="毎月の自動売上"
-                        body="自分のビジネスでも同じ仕組みを運用しています。寝ている間に売上が立つ感覚を、一度味わうと元には戻れません。"
+                        name="整体協会の会長様"
+                        role="整体×経営の講座"
+                        body="正直、最初は半信半疑でした。でも導線を組んでから、私が施術や講義に集中している間にも申込みが入るようになった。“売る時間”がまるごと消えて、教える時間が増えた。これが一番の変化です。"
                     />
                     <Testimonial
-                        avatar="A"
+                        avatar="虎"
+                        avatarBg="from-orange-400 to-rose-500"
+                        name="令和の虎の社長様"
+                        role="財務の講座"
+                        body="財務という固いテーマでも、ステップ配信が順番に納得を作ってくれる。営業しなくても“わかってる人”だけが申し込んでくるので、クレームもキャンセルも激減しました。"
+                    />
+                    <Testimonial
+                        avatar="卓"
                         avatarBg="from-violet-400 to-fuchsia-500"
-                        name="Aさん"
-                        role="アフィリエイター"
-                        result="月7桁達成"
-                        resultLabel="フォロワー1,200人で"
-                        body="フォロワーが少なくても、リストの質が高ければ売上は立つ。LINE教育の力を実感しています。ProX Agent との相性も抜群です。"
+                        name="オンライン卓球教室"
+                        role="動画完結型の講座"
+                        body="対面前提だった指導が、動画講座として全国に届くようになりました。寝て起きたら決済通知、という朝を初めて経験して、もう元の働き方には戻れません。"
                     />
                 </div>
             </div>
@@ -464,7 +464,7 @@ function SectionCompare() {
                     <p className="text-orange-500 text-sm tracking-widest font-bold uppercase mb-3">
                         他社のLINEツールと比べると
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight">
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight">
                         無料なのに、機能で<br />
                         <span className="text-emerald-600">他社の上位プランを上回る。</span>
                     </h2>
@@ -507,7 +507,7 @@ function SectionCompare() {
 }
 
 /* =============================================================
- * 7. 限定性・緊急性
+ * 8. 緊急性
  * ============================================================= */
 function SectionUrgency() {
     return (
@@ -516,12 +516,12 @@ function SectionUrgency() {
                 <p className="text-orange-500 text-sm tracking-widest font-bold uppercase mb-3">
                     1つだけ、注意してください
                 </p>
-                <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
+                <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight max-w-3xl mx-auto">
                     いまこの瞬間も、<br />
                     <span className="text-orange-500">ProX が集めるフォロワーが流出しています。</span>
                 </h2>
 
-                <p className="mt-8 text-lg text-slate-700 max-w-2xl mx-auto leading-relaxed">
+                <p className="mt-8 text-base md:text-lg text-slate-700 max-w-2xl mx-auto leading-relaxed">
                     ProX Agent は毎日フォロワーを集めますが、教育の受け皿が無いと、<br />
                     その人たちは <span className="text-slate-900 font-bold">リスト化されずに流出</span> していきます。
                 </p>
@@ -543,7 +543,7 @@ function SectionUrgency() {
 }
 
 /* =============================================================
- * 8. 不信の払拭・FAQ
+ * 9. FAQ
  * ============================================================= */
 function SectionFaq() {
     return (
@@ -553,7 +553,7 @@ function SectionFaq() {
                     <p className="text-emerald-600 text-sm tracking-widest font-bold uppercase mb-3">
                         よくあるご質問
                     </p>
-                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 leading-tight">
+                    <h2 className="text-2xl md:text-5xl font-bold text-slate-900 leading-tight">
                         「うまい話すぎないか？」<br />
                         <span className="text-emerald-600">正直な反応です。</span>
                     </h2>
@@ -562,11 +562,11 @@ function SectionFaq() {
                 <div className="space-y-4">
                     <Faq
                         q="本当に無料？どこかで課金が発生するのでは？"
-                        a="月額もクレジット登録も不要。ステップ配信・タグ管理・絞り込み配信・流入分析まで、すべて無料プランで無制限に使えます。アップグレードは任意で、無料プランのまま月1,000万を回している事例もあります(私もその一人です)。"
+                        a="月額もクレジット登録も不要です。ステップ配信・タグ管理・絞り込み配信・流入分析まで、本格機能がそのまま無料で使えます。まずは無料の範囲だけで、「X → LINE → 販売」の導線はしっかり作れます。（アップグレードは任意です。）"
                     />
                     <Faq
                         q="設定が難しそう。技術が無いと使えない？"
-                        a="シナリオ配信は GUI で組めるので、コードは1行も書きません。テンプレートも豊富で、登録から30分で『最初のステップ配信』を稼働させた事例があります。ProX Agent との連携は、生成投稿のCTAに発行された LINE URL を貼り付けるだけです。"
+                        a="ご安心ください。使い方は無料の動画講座で学べます。しかもただの操作説明ではなく、108万円の商品を18億円売り切った“売り方の理論”までセットで学べる構成。下手に高額講座を買うより、質の高いセミナーがここでは無料で見られる──そういうレベルの中身です。シナリオ自体も GUI で組めるので、コードは1行も書きません。"
                     />
                     <Faq
                         q="合わなかったら、お金や時間は取り戻せない？"
@@ -574,7 +574,7 @@ function SectionFaq() {
                     />
                     <Faq
                         q="他のLINEツールと比べて、なぜプロラインフリー？"
-                        a="(1) 無料で本格機能、(2) 私が顧問業で実際に毎月使っており勝ちパターンを把握している、(3) ProX Agent との連携が最も自然、の3点です。私が ProX のCTA設定でデフォルト推奨にしているのも同じ理由です。"
+                        a="(1) 無料で本格機能、(2) 私がプロライン認定コンサルタントとして1,500件以上の構築を見てきて勝ちパターンを把握している、(3) ProX Agent との連携が最も自然、の3点です。私が ProX のCTA設定でデフォルト推奨にしているのも同じ理由です。"
                     />
                     <Faq
                         q="X以外のSNS集客にも使える？"
@@ -587,7 +587,82 @@ function SectionFaq() {
 }
 
 /* =============================================================
- * 9. Final CTA — 後押し
+ * 9.5 無料コンサル訴求（無料お試し者限定で吉留を指名）
+ * ============================================================= */
+function SectionConsult() {
+    const steps = [
+        "LINEのチャットでメールアドレスを入力",
+        "導入・使い方の動画を見る",
+        "公式LINEとプロラインを連携する",
+        "無料コンサルの概要動画を見る",
+        "有料プランを無料お試し（最大90日無料・いつでも解約OK）",
+        "無料お試しをした人限定で「吉留 大貴」を指名できる",
+    ];
+    return (
+        <section className="py-20 md:py-28 bg-gradient-to-br from-slate-900 via-emerald-900 to-slate-900 text-white">
+            <div className="max-w-4xl mx-auto px-6">
+                <div className="text-center mb-12">
+                    <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-emerald-200 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide mb-6">
+                        <Star className="size-3.5 fill-emerald-300 text-emerald-300" />
+                        無料お試しをした人だけの特典
+                    </div>
+                    <h2 className="text-2xl md:text-4xl font-black leading-tight max-w-3xl mx-auto">
+                        ProX開発者・吉留大貴の個別コンサルを、<br />
+                        <span className="text-emerald-300">1回 &quot;無料&quot;</span> で。
+                    </h2>
+                    <p className="mt-6 text-emerald-50/90 leading-relaxed max-w-2xl mx-auto text-sm md:text-base">
+                        あなたの事業・副業の「戦略設計」から「導線づくり」まで丸ごとサポート。
+                        <br className="hidden md:block" />
+                        通常 <strong className="text-white">40分29,700円</strong>・累計 <strong className="text-white">1,500件以上</strong> の個別コンサルを、受けてみませんか？
+                    </p>
+                </div>
+
+                {/* 登録後の流れ ①〜⑥ */}
+                <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-10">
+                    <p className="text-xs font-bold tracking-widest uppercase text-emerald-300 mb-6 text-center">
+                        無料コンサルまでの流れ
+                    </p>
+                    <ol className="space-y-4">
+                        {steps.map((step, i) => (
+                            <li key={i} className="flex items-start gap-4">
+                                <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${i === steps.length - 1 ? "bg-emerald-400 text-slate-900" : "bg-white/15 text-emerald-200"}`}>
+                                    {i + 1}
+                                </span>
+                                <p className={`pt-1 leading-relaxed text-sm md:text-base ${i === steps.length - 1 ? "text-white font-bold" : "text-emerald-50/90"}`}>
+                                    {step}
+                                </p>
+                            </li>
+                        ))}
+                    </ol>
+                </div>
+
+                <div className="mt-10 flex flex-col items-center gap-3">
+                    <a
+                        href={PROLINE_REGISTER_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-[calc(100%-2rem)] max-w-md"
+                    >
+                        <Button
+                            size="lg"
+                            className="w-full h-16 bg-emerald-400 hover:bg-emerald-300 text-slate-900 font-black text-base md:text-lg rounded-full shadow-2xl border-0 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            <Sparkles className="size-5 mr-2" />
+                            無料ではじめてコンサルまで受ける
+                            <ArrowRight className="size-5 ml-2" />
+                        </Button>
+                    </a>
+                    <p className="text-emerald-100/80 text-xs">
+                        まずは無料のプロラインフリー登録から。費用はかかりません。
+                    </p>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+/* =============================================================
+ * 10. Final CTA
  * ============================================================= */
 function SectionFinal() {
     return (
@@ -652,33 +727,18 @@ function SectionFinal() {
 }
 
 /* =============================================================
- * 既存ユーザー向け
+ * 既存ユーザー向け（KPI連携の予告）
  * ============================================================= */
 function ExistingUserNote() {
     return (
         <section className="py-12 bg-slate-50 border-t border-slate-200">
-            <div className="max-w-3xl mx-auto px-6 text-center space-y-4">
+            <div className="max-w-3xl mx-auto px-6 text-center space-y-3">
                 <p className="text-slate-500 text-sm font-bold">すでにプロラインフリーをお持ちの方へ</p>
-                <p className="text-slate-600 text-sm leading-relaxed max-w-xl mx-auto">
-                    ProX Agent の自動投稿機能で、CTAに発行済みのプロラインURLを設定するだけで、
-                    X集客 → LINE自動配信の連携が完了します。
+                <p className="text-slate-700 text-base md:text-lg font-bold leading-relaxed max-w-xl mx-auto">
+                    プロラインとProXのKPIを、まとめて管理できる<br className="hidden md:block" />
+                    <span className="text-emerald-600">『KPI管理機能』を近日リリース予定</span>です。
                 </p>
-                <div className="flex justify-center gap-3 flex-wrap pt-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => (window.location.href = "/dashboard/settings")}
-                        className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-                    >
-                        設定画面を開く
-                    </Button>
-                    <Button
-                        variant="outline"
-                        onClick={() => (window.location.href = "/dashboard/generate")}
-                        className="bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
-                    >
-                        AI自動投稿を試す
-                    </Button>
-                </div>
+                <p className="text-slate-500 text-sm">連携機能のリリースを、お楽しみに。</p>
             </div>
         </section>
     );
@@ -725,7 +785,7 @@ function BigStat({ label, value, unit }: { label: string; value: string; unit: s
         <div className="bg-white rounded-2xl shadow-md border border-slate-200 p-4 md:p-6 text-center">
             <p className="text-xs md:text-sm text-slate-500 mb-1">{label}</p>
             <div className="flex items-end justify-center gap-1 leading-none">
-                <span className="text-3xl md:text-5xl font-black text-emerald-600 tabular-nums">
+                <span className="text-2xl md:text-5xl font-black text-emerald-600 tabular-nums">
                     {value}
                 </span>
                 {unit && <span className="text-base md:text-lg text-slate-700 font-bold mb-1">{unit}</span>}
@@ -743,12 +803,26 @@ function MessageBlock({ icon, label }: { icon: React.ReactNode; label: string })
     );
 }
 
-function DreamCard({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
+function AchievementCard({ name, tag, value, note }: { name: string; tag: string; value: string; note: string }) {
+    return (
+        <div className="snap-start shrink-0 w-[78%] sm:w-[46%] md:w-auto bg-white rounded-2xl border border-emerald-100 shadow-sm p-6 flex flex-col">
+            <p className="text-xs text-slate-500 mb-1">{name}</p>
+            <p className="text-sm font-bold text-slate-700 mb-4">{tag}</p>
+            <p className="text-2xl font-black text-emerald-600 leading-none tabular-nums whitespace-nowrap">{value}</p>
+            <p className="text-xs text-slate-500 mt-2">{note}</p>
+        </div>
+    );
+}
+
+function DreamCard({ eyebrow, icon, title, body }: { eyebrow?: string; icon: React.ReactNode; title: string; body: string }) {
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 md:p-8 space-y-3">
             <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
                 {icon}
             </div>
+            {eyebrow && (
+                <p className="text-xs font-bold tracking-widest uppercase text-emerald-600">{eyebrow}</p>
+            )}
             <h3 className="text-lg md:text-xl font-bold text-slate-900">{title}</h3>
             <p className="text-slate-600 leading-relaxed text-sm md:text-base">{body}</p>
         </div>
@@ -809,14 +883,12 @@ function FeatureCard({ icon, title, body }: { icon: React.ReactNode; title: stri
 }
 
 function Testimonial({
-    avatar, avatarBg, name, role, result, resultLabel, body,
+    avatar, avatarBg, name, role, body,
 }: {
     avatar: string;
     avatarBg: string;
     name: string;
     role: string;
-    result: string;
-    resultLabel: string;
     body: string;
 }) {
     return (
@@ -829,10 +901,6 @@ function Testimonial({
                     <p className="font-bold text-slate-900">{name}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{role}</p>
                 </div>
-            </div>
-            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                <p className="text-xs text-emerald-700 font-bold tracking-wider uppercase mb-1">{resultLabel}</p>
-                <p className="text-2xl md:text-3xl font-black text-emerald-700 leading-none">{result}</p>
             </div>
             <p className="text-slate-700 text-sm leading-relaxed">「{body}」</p>
         </div>
