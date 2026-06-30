@@ -68,6 +68,13 @@ export default function ResearchPage() {
 
     // 共通：ユーザー入力テーマ（書き換え時の必須入力）
     const [userTheme, setUserTheme] = useState("");
+
+    // 決定 #036 §2② — リサーチからの投稿生成は AI APIキー登録が必須。
+    //   未登録時、structure-rewrite が 402 research_key_required を返す。
+    //   その場合は生エラーではなく、このポップアップを出し、ボタンで AI APIキー登録画面へ誘導する。
+    const [keyGate, setKeyGate] = useState<{ open: boolean; message: string; path: string }>(
+        { open: false, message: "", path: "/dashboard/settings#ai-api-key" }
+    );
     // 任意CTA URL — 入力すると生成本文の末尾に自動付与される（LLMには生成させず後処理で付与）
     const [ctaUrl, setCtaUrl] = useState("");
     // ツリー全体（本人連投スレッド）を取得するか — URL入力時のみ有効
@@ -206,6 +213,18 @@ export default function ResearchPage() {
 
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
+                // 決定 #036 §2② — リサーチ経由生成は AI APIキー登録が必須。
+                //   バックエンドが 402 research_key_required を返したら、生エラーにせず
+                //   ポップアップを開いて AI APIキー登録画面への導線を出す。
+                if (res.status === 402 && (errorData.gate === "research_key_required" || errorData.error === "research_key_required")) {
+                    setKeyGate({
+                        open: true,
+                        message: errorData.message
+                            || "投稿作成は1日1回無料ですが、リサーチから投稿作成機能を使うにはAIのAPIキー登録が必要です。",
+                        path: errorData.keyRegistrationPath || "/dashboard/settings#ai-api-key",
+                    });
+                    return;
+                }
                 throw new Error(errorData.error || "解析エラーが発生しました。");
             }
 
@@ -382,6 +401,48 @@ export default function ResearchPage() {
 
     return (
         <div className="space-y-6">
+            {/* 決定 #036 §2② — リサーチ生成は AI APIキー登録必須。未登録時のゲートポップアップ。 */}
+            {keyGate.open && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    data-testid="research-key-gate"
+                    onClick={() => setKeyGate(g => ({ ...g, open: false }))}
+                >
+                    <div
+                        className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl space-y-5"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100">
+                                <Sparkles className="h-5 w-5 text-indigo-600" />
+                            </div>
+                            <div className="space-y-1">
+                                <h2 className="text-lg font-semibold text-slate-900">AI APIキーの登録が必要です</h2>
+                                <p className="text-sm leading-relaxed text-slate-600">{keyGate.message}</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setKeyGate(g => ({ ...g, open: false }))}
+                            >
+                                閉じる
+                            </Button>
+                            <Button
+                                type="button"
+                                data-testid="research-key-gate-cta"
+                                className="bg-indigo-600 text-white hover:bg-indigo-700"
+                                onClick={() => { window.location.href = keyGate.path; }}
+                            >
+                                AI APIキーを登録する
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div>
                 <h1 className="text-3xl font-bold tracking-tight text-slate-900">🔎 完全自動リサーチ＆横展開</h1>
                 <p className="text-slate-600 mt-2">

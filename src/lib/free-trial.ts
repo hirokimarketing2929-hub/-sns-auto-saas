@@ -121,6 +121,31 @@ export function byokRequiredResponse(freeLimit: number): Response {
     );
 }
 
+/**
+ * 402 research_key_required の共通レスポンス（決定 #036 §2② / リサーチ経由生成専用ゲート）。
+ *
+ * 仕様: 通常の投稿生成は「1日1回無料」（byok_required ゲート）だが、リサーチからの投稿生成は
+ *   無料枠に含めず **AI APIキー登録を必須** とする（コスト＝多段呼び出しで重いため）。
+ *   自鍵未登録のユーザーがリサーチ生成を叩いた場合、当社鍵フォールバックも無料枠も使わず、
+ *   この専用レスポンスを返す。FE は error 識別子 "research_key_required" でポップアップ分岐し、
+ *   ボタンタップで AI APIキー登録画面（/dashboard/settings#ai-api-key）へ遷移させる。
+ *
+ * 生 500 で落とさず構造化 4xx を返すことで FE が確実に分岐できる（#036 要件）。
+ */
+export function researchKeyRequiredResponse(): Response {
+    const message =
+        "投稿作成は1日1回無料ですが、リサーチから投稿作成機能を使うにはAIのAPIキー登録が必要です。";
+    return new Response(
+        JSON.stringify({
+            error: "research_key_required",
+            gate: "research_key_required",
+            keyRegistrationPath: "/dashboard/settings#ai-api-key",
+            message,
+        }),
+        { status: 402, headers: { "Content-Type": "application/json" } }
+    );
+}
+
 // =============================================================================
 // RT-015 対策: フリーミアム「1日1回」ゲートの atomic 予約（TOCTOU 並列レース封鎖）
 // =============================================================================

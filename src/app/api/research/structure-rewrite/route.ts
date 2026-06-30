@@ -6,6 +6,7 @@ import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
 import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
+import { researchKeyRequiredResponse } from "@/lib/free-trial";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -543,11 +544,24 @@ export async function POST(req: Request) {
                 _user_theme: userTheme.trim(),
             }, { status: 200 });
         }
-        // フリーミアム（#033）＋濫用ガード（#032）を共通ラッパで一括適用（RT-015 atomic 予約 + 24h キャップ）。
-        //   （ここに到達した時点で provider != null ＝ resolved も非 null）。
-        //   本ルートは内部で最大7回の当社鍵呼び出しを行うが、暦日の無料「枠」は1。予約は1枠で取り、
-        //   個々の呼び出しコストは各 logLlmUsage が 24h キャップに反映する（多層防御）。
+        // 自鍵（BYOK）を使っているか。env:anthropic（当社鍵フォールバック）なら false。
         const usingOwnKey = resolved!.source !== "env:anthropic";
+
+        // ★ 決定 #036 §2② — リサーチからの投稿生成は「無料枠に含めず AI APIキー登録を必須」。
+        //   通常の投稿生成（/api/generate）は「1日1回無料 → 自鍵」（#033）だが、リサーチ経由は
+        //   1リクエストで最大7回の AI 呼び出しが走り重いため、無料枠の対象外とする。
+        //   自鍵未登録（usingOwnKey=false ＝ 当社鍵フォールバックに倒れている）の場合は、
+        //   無料枠も当社鍵も消費せず、専用の 402 research_key_required を返す。
+        //   FE はこの error 識別子でポップアップを出し、ボタンで AI APIキー登録画面へ遷移させる。
+        //   生 500 で落とさないことで FE が確実に分岐できる（#036 要件）。
+        if (!usingOwnKey) {
+            console.log("[structure-rewrite] research gate: AI key not registered -> research_key_required");
+            return researchKeyRequiredResponse();
+        }
+
+        // フリーミアム（#033）＋濫用ガード（#032）を共通ラッパで一括適用（RT-015 atomic 予約 + 24h キャップ）。
+        //   ここに到達するのは usingOwnKey=true（自鍵登録済）のみ。自鍵は無制限・予約/キャップとも no-op。
+        //   （リサーチ経由は当社鍵フォールバックを上のゲートで遮断済みのため、当社鍵消費は発生しない）。
         const guardResult = await acquireOwnerKeyGuard({
             userId: user.id,
             usingOwnKey,

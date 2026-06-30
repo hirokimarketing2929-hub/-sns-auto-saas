@@ -381,7 +381,8 @@ function prox_sign_(secret, message) {
                             {/* 生成AI プロバイダ（Claude / OpenAI）— 常時表示・任意入力（決定 #033）。
                                 自分の API キーを登録すると「1日1回無料」制度を卒業し、常に自分の鍵で無制限に使えます
                                 （当社鍵は一切消費しません）。未登録でも 1日1回は当社鍵で無料生成できます。 */}
-                            <div className="space-y-4">
+                            {/* id="ai-api-key": リサーチ生成ゲート（#036）のポップアップ「AI APIキーを登録する」ボタンの遷移先アンカー。 */}
+                            <div id="ai-api-key" className="space-y-4 scroll-mt-20">
                                 <h3 className="text-lg font-semibold">🤖 生成 AI プロバイダ API キー (BYOK)
                                     <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 align-middle">任意</span>
                                     <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 align-middle">🌐 全アカ共通</span>
