@@ -18,6 +18,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [inviteCode, setInviteCode] = useState("");
+    const [agreed, setAgreed] = useState(false); // 利用規約・プライバシーポリシー同意（新規登録時のみ必須）
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -50,6 +51,12 @@ export default function LoginPage() {
             }
         } else {
             // 新規登録処理
+            // 利用規約・プライバシーポリシーへの明示同意（チェックボックス）が必須。
+            if (!agreed) {
+                setError("利用規約とプライバシーポリシーに同意してください。");
+                setLoading(false);
+                return;
+            }
             try {
                 const res = await fetch("/api/register", {
                     method: "POST",
@@ -139,13 +146,31 @@ export default function LoginPage() {
                             />
                         </div>
 
+                        {!isLogin && (
+                            <div className="flex items-start gap-2">
+                                <input
+                                    id="agree"
+                                    type="checkbox"
+                                    checked={agreed}
+                                    onChange={(e) => setAgreed(e.target.checked)}
+                                    className="mt-1 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-700 accent-indigo-600"
+                                />
+                                <Label htmlFor="agree" className="text-xs font-normal text-slate-300 leading-relaxed">
+                                    <a href="/terms" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-indigo-400 underline hover:text-indigo-300">利用規約</a>
+                                    {" と "}
+                                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-indigo-400 underline hover:text-indigo-300">プライバシーポリシー</a>
+                                    {" に同意します（自動投稿に伴うシャドウバン・アカウント凍結等のリスクを理解し、自己責任で利用します）"}
+                                </Label>
+                            </div>
+                        )}
+
                         {error && (
                             <div className="text-sm font-medium text-red-400 bg-red-900/30 p-3 rounded-md border border-red-800/50">
                                 {error}
                             </div>
                         )}
 
-                        <Button type="submit" className="w-full" disabled={loading}>
+                        <Button type="submit" className="w-full" disabled={loading || (!isLogin && !agreed)}>
                             {loading ? "処理中..." : isLogin ? "ログイン" : "アカウント作成"}
                         </Button>
                     </form>
