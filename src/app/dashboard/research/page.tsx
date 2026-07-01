@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Search, Zap, CheckCircle2, Copy, Sparkles, AtSign, ShieldAlert, Heart, Repeat, MessageCircle, Quote, ExternalLink, Wand2, Pencil, Save, X, CalendarPlus, BookmarkPlus } from "lucide-react";
@@ -75,6 +75,13 @@ export default function ResearchPage() {
     const [keyGate, setKeyGate] = useState<{ open: boolean; message: string; path: string }>(
         { open: false, message: "", path: "/dashboard/settings#ai-api-key" }
     );
+    // 決定 #042（task018③）— リサーチ生成も「1日1回無料」の共通カウンターを消費する。
+    //   生成画面（/dashboard/generate）と同じ共通枠の残数をここでも吹き出し表示する。
+    //   初期値は /api/settings から取得し、生成成功レスポンスの freeRemaining で更新する。
+    const [freeRemaining, setFreeRemaining] = useState<number | null>(null);
+    const [freeLimit, setFreeLimit] = useState<number | null>(null);
+    const [usingOwnKey, setUsingOwnKey] = useState(false);
+
     // 任意CTA URL — 入力すると生成本文の末尾に自動付与される（LLMには生成させず後処理で付与）
     const [ctaUrl, setCtaUrl] = useState("");
     // ツリー全体（本人連投スレッド）を取得するか — URL入力時のみ有効
@@ -88,6 +95,25 @@ export default function ResearchPage() {
     // テンプレート（投稿の型）保存の状態。new result が来たらリセットされる。
     const [templateSaveStatus, setTemplateSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
     const [savedTemplateKnowledgeId, setSavedTemplateKnowledgeId] = useState<string | null>(null);
+
+    // マウント時に共通フリーミアム枠の残数を取得（生成画面と同一の値・決定 #042）。
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/settings");
+                if (!res.ok) return;
+                const data = await res.json().catch(() => ({}));
+                if (cancelled) return;
+                if (typeof data.freeRemaining === "number") setFreeRemaining(data.freeRemaining);
+                if (typeof data.freeLimit === "number") setFreeLimit(data.freeLimit);
+                setUsingOwnKey(data.usingOwnKey === true);
+            } catch {
+                /* 取得失敗時は吹き出し非表示のまま（生成自体は妨げない）。 */
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     // @username または URL → ポスト取得のみ
     const handleFetchPost = async () => {
@@ -213,14 +239,20 @@ export default function ResearchPage() {
 
             if (!res.ok) {
                 const errorData = await res.json().catch(() => ({}));
-                // 決定 #036 §2② — リサーチ経由生成は AI APIキー登録が必須。
-                //   バックエンドが 402 research_key_required を返したら、生エラーにせず
+                // 決定 #042（task018③）— リサーチ経由生成も「1日1回無料」の共通枠を消費する。
+                //   共通無料枠を使い切ると、バックエンドは通常生成と同じ 402 byok_required を返す。
+                //   （旧 research_key_required も後方互換で受ける。）いずれも生エラーにせず、
                 //   ポップアップを開いて AI APIキー登録画面への導線を出す。
-                if (res.status === 402 && (errorData.gate === "research_key_required" || errorData.error === "research_key_required")) {
+                if (
+                    res.status === 402 &&
+                    (errorData.error === "byok_required" ||
+                        errorData.gate === "research_key_required" ||
+                        errorData.error === "research_key_required")
+                ) {
                     setKeyGate({
                         open: true,
                         message: errorData.message
-                            || "投稿作成は1日1回無料ですが、リサーチから投稿作成機能を使うにはAIのAPIキー登録が必要です。",
+                            || "本日の無料分を使い切りました。続けて使うにはご自身のAPIキーを設定してください（明日また1回無料）。",
                         path: errorData.keyRegistrationPath || "/dashboard/settings#ai-api-key",
                     });
                     return;
@@ -230,6 +262,10 @@ export default function ResearchPage() {
 
             const data = await res.json();
             setResult(data);
+            // 共通フリーミアム枠の残数を生成結果で更新（投稿生成と共有・決定 #042）。
+            if (typeof data.freeRemaining === "number") setFreeRemaining(data.freeRemaining);
+            if (typeof data.freeLimit === "number") setFreeLimit(data.freeLimit);
+            if (typeof data.usingOwnKey === "boolean") setUsingOwnKey(data.usingOwnKey);
         } catch (error: unknown) {
             console.error(error);
             const msg = error instanceof Error ? error.message : String(error);
@@ -444,7 +480,22 @@ export default function ResearchPage() {
                 </div>
             )}
             <div>
-                <h1 className="text-3xl font-bold tracking-tight text-slate-900">🔎 完全自動リサーチ＆横展開</h1>
+                <div className="flex flex-wrap items-center gap-3">
+                    <h1 className="text-3xl font-bold tracking-tight text-slate-900">🔎 完全自動リサーチ＆横展開</h1>
+                    {/* 共通フリーミアム枠の残数（投稿生成と共有・決定 #042）。自鍵利用時は非表示。 */}
+                    {!usingOwnKey && freeRemaining !== null && (
+                        <span
+                            data-testid="research-free-remaining-badge"
+                            className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${
+                                freeRemaining > 0
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-700"
+                                    : "bg-amber-500/15 border-amber-500/30 text-amber-700"
+                            }`}
+                        >
+                            本日の無料 残り{freeRemaining}回{freeLimit !== null ? ` / ${freeLimit}` : ""}
+                        </span>
+                    )}
+                </div>
                 <p className="text-slate-600 mt-2">
                     X運用で必須となる「他ジャンルからの発想の輸入」をAIで自動化。
                     リサーチ方法を選び、AIに最強のオリジナル投稿案を作らせましょう。

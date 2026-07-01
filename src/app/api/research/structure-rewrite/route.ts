@@ -6,7 +6,6 @@ import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
 import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
-import { researchKeyRequiredResponse } from "@/lib/free-trial";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -547,21 +546,16 @@ export async function POST(req: Request) {
         // 自鍵（BYOK）を使っているか。env:anthropic（当社鍵フォールバック）なら false。
         const usingOwnKey = resolved!.source !== "env:anthropic";
 
-        // ★ 決定 #036 §2② — リサーチからの投稿生成は「無料枠に含めず AI APIキー登録を必須」。
-        //   通常の投稿生成（/api/generate）は「1日1回無料 → 自鍵」（#033）だが、リサーチ経由は
-        //   1リクエストで最大7回の AI 呼び出しが走り重いため、無料枠の対象外とする。
-        //   自鍵未登録（usingOwnKey=false ＝ 当社鍵フォールバックに倒れている）の場合は、
-        //   無料枠も当社鍵も消費せず、専用の 402 research_key_required を返す。
-        //   FE はこの error 識別子でポップアップを出し、ボタンで AI APIキー登録画面へ遷移させる。
-        //   生 500 で落とさないことで FE が確実に分岐できる（#036 要件）。
-        if (!usingOwnKey) {
-            console.log("[structure-rewrite] research gate: AI key not registered -> research_key_required");
-            return researchKeyRequiredResponse();
-        }
-
-        // フリーミアム（#033）＋濫用ガード（#032）を共通ラッパで一括適用（RT-015 atomic 予約 + 24h キャップ）。
-        //   ここに到達するのは usingOwnKey=true（自鍵登録済）のみ。自鍵は無制限・予約/キャップとも no-op。
-        //   （リサーチ経由は当社鍵フォールバックを上のゲートで遮断済みのため、当社鍵消費は発生しない）。
+        // ★ 決定 #042（#036 §2② の更新 / task018③）— リサーチからの投稿生成も「1日1回無料」へ。
+        //   旧仕様: リサーチは無料枠の対象外で、自鍵未登録なら即 402 research_key_required を返していた。
+        //   新仕様: 通常の投稿生成（/api/generate）と「同一の共通カウンター」を参照・消費する。
+        //     - 自鍵未登録（usingOwnKey=false）＆共通無料枠が残っている → 当社鍵で生成（共通枠を1消費）。
+        //     - 共通無料枠を使い切っている → acquireOwnerKeyGuard が 402 byok_required を返す（鍵登録ポップアップ）。
+        //     - 自鍵登録済（usingOwnKey=true）→ 常に自鍵・無制限（予約/キャップとも no-op）。
+        //   リサーチは1リクエストで最大7回 AI を呼ぶが、共通枠の「予約」は run 入場時に1枠だけ取る
+        //   （reserveOwnerKeyDailySlot は run 前のカウントで判定）ため、当社鍵消費は共通枠の1回に必ず収まる。
+        //   個々の呼び出しコストは各 logLlmUsage 経由で 24h キャップ（#032）に反映され多層防御される。
+        //   ※ 専用ゲート researchKeyRequiredResponse は廃止（共通の byokRequiredResponse に統一）。
         const guardResult = await acquireOwnerKeyGuard({
             userId: user.id,
             usingOwnKey,
