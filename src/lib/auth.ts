@@ -9,6 +9,7 @@ import { getToken } from "next-auth/jwt"
 import { encryptSecret } from "@/lib/crypto"
 import { isLoginLockedOut, recordLoginFailure, clearLoginFailures } from "@/lib/rate-limit"
 import type { Adapter, AdapterAccount } from "next-auth/adapters"
+import { TwitterApi } from "twitter-api-v2"
 
 /**
  * PrismaAdapter をラップし、linkAccount（新規ユーザーの初回 OAuth サインインで
@@ -216,13 +217,28 @@ export const authOptions: NextAuthOptions = {
             }).catch(() => null);
             if (!existingX) {
                 const profileName = (user as any)?.name as string | undefined;
-                const displayName = profileName ? `@${profileName.replace(/^@/, "")}` : "新規Xアカウント";
+                // xUsername には X の @ハンドル（/2/users/me の username）を保存する。
+                // NextAuth の Twitter プロバイダが渡す user.name は「表示名」でありハンドルではないため、
+                // 手動キー登録経路（/api/x-accounts）と同じく v2.me() で取得し `@username` 形式に揃える。
+                let handle: string | null = null;
+                let xUserId: string | null = null;
+                if (account.access_token) {
+                    try {
+                        const me = await new TwitterApi(account.access_token).v2.me();
+                        handle = me.data.username ? `@${me.data.username}` : null;
+                        xUserId = me.data.id ?? null;
+                    } catch (e) {
+                        console.error("[signIn] X ハンドル取得失敗（表示名で代替）:", e instanceof Error ? e.message : e);
+                    }
+                }
+                const displayName = profileName || handle || "新規Xアカウント";
                 const created = await (prisma as any).xAccount.create({
                     data: {
                         userId: existingUserId,
                         displayName,
                         oauthAccountId: upsertedAccount.id,
-                        xUsername: profileName ?? null,
+                        xUsername: handle ?? profileName ?? null,
+                        xUserId,
                         xProfileImageUrl: (user as any)?.image ?? null,
                     },
                 });

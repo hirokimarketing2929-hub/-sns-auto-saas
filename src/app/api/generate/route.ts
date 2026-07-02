@@ -392,6 +392,7 @@ export async function POST(req: Request) {
         let content = "";
         let parseOk = false;
         let timedOut = false;
+        let authFailed = false;
         // 予約行（success=false プレースホルダ）への確定は最後に1回だけ行う。
         // 失敗試行ぶんの追加コストは独立ログで漏れなく計上する。
         let lastInputTokens = 0;
@@ -429,6 +430,8 @@ export async function POST(req: Request) {
                 });
             } catch (e) {
                 if (isTimeoutError(e)) timedOut = true;
+                // プロバイダの 401 = API キー無効。リトライしても回復しないため区別して案内する。
+                if (e instanceof Error && /error \(401\)/.test(e.message)) authFailed = true;
                 console.warn(`generate attempt at temp ${temp} failed:`, e);
             }
         }
@@ -440,6 +443,12 @@ export async function POST(req: Request) {
                 return NextResponse.json({
                     error: "生成がタイムアウトしました。もう一度お試しください。"
                 }, { status: 504 });
+            }
+            // 自鍵（BYOK）利用時のみキー無効を明示する（当社鍵側の状態は外部に出さない: RT-006）。
+            if (authFailed && usingOwnKey) {
+                return NextResponse.json({
+                    error: "設定されたAPIキーが無効です。設定画面でキーを確認・再登録してください。"
+                }, { status: 401 });
             }
             return NextResponse.json({
                 error: "AI による投稿生成に失敗しました。テーマをもう少し具体的にして再実行してください。"
