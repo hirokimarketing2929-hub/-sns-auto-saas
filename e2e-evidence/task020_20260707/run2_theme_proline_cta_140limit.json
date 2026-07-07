@@ -1,0 +1,26 @@
+{
+  "run": 2,
+  "endpoint": "POST /api/generate",
+  "theme_input": "プロラインフリーというLINE公式拡張ツールの魅力について、集客から販売までの自動化という切り口で書いて。プロフに誘導する一文を入れて。",
+  "research_mode": false,
+  "enforce_140_limit": true,
+  "engine": "anthropic:claude-sonnet-4-6",
+  "response": {
+    "content": "集客〜販売を全自動化できるツールを見つけた。\n\nプロラインフリーを使えば\n・LINE登録で即座に自動応答\n・ステップ配信で関係構築\n・購買タイミングで自動オファー\n\n人が動かなくても売れる仕組みが完成する。\n\nAI×LINE自動化の詳細はプロフへ。",
+    "platform": "X",
+    "_engine": "anthropic:claude-sonnet-4-6",
+    "freeRemaining": 0,
+    "freeLimit": 1,
+    "usingOwnKey": false
+  },
+  "verification": {
+    "char_count": 124,
+    "within_140_limit": true,
+    "has_preamble_metatalk": false,
+    "has_divider_line": false,
+    "has_hashtags": false,
+    "content_quality_ok": true,
+    "explicit_cta_instruction_still_works": true,
+    "notes": "140文字制約ONで124文字に収まった（既存の文字数制約仕様は維持）。ユーザーが明示指示した『プロフに誘導する一文』も末尾に反映（既存の誘導ルール例外仕様も維持）。前置き・ハッシュタグなし。"
+  }
+}

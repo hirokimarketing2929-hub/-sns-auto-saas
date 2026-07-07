@@ -1,0 +1,23 @@
+{
+  "run": 1,
+  "endpoint": "POST /api/generate",
+  "theme_input": "AIツールを使った業務効率化について、具体的な体験談を交えて書いて。",
+  "research_mode": false,
+  "enforce_140_limit": false,
+  "engine": "anthropic:claude-sonnet-4-6",
+  "response": {
+    "content": "先月、毎週8時間かかっていた業務報告書の作成が、今は45分で終わるようになった。\n\n使ったのはAIツール1つだけ。\n\nやったことはシンプルで、\n\n① 会議メモをそのままAIに貼り付ける\n② 「報告書形式にまとめて」と指示する\n③ 出てきた文章を自分の言葉に微修正する\n\nたったこれだけ。\n\n最初は「AIが書いた文章なんて使えない」と思ってた。でも実際に試したら、構成の8割はそのまま使えるレベルだった。\n\n時間が浮いた分、本来やるべき戦略的な仕事に集中できるようになって、上司からの評価も変わった。\n\nAIツールが使いこなせない人の多くは「完璧な指示を出さなきゃ」と構えすぎている。\n\n実際は「雑なメモ → AIに投げる → ちょっと直す」で十分機能する。\n\n完璧を目指すより、まず1回試す。それだけで世界が変わる。",
+    "platform": "X",
+    "_engine": "anthropic:claude-sonnet-4-6",
+    "freeRemaining": 0,
+    "freeLimit": 1,
+    "usingOwnKey": false
+  },
+  "verification": {
+    "has_preamble_metatalk": false,
+    "has_divider_line": false,
+    "has_hashtags": false,
+    "content_quality_ok": true,
+    "notes": "前置き（「〜投稿を作成します」等）なし。区切り線「---」なし。ハッシュタグなし。文字数制約(140字指定なし)・トンマナとも既存仕様通り。"
+  }
+}

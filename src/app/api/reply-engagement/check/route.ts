@@ -8,6 +8,7 @@ import { logXApiUsage, logLlmUsage } from "@/lib/api-usage";
 import { resolveAIProviderFromSettings, type ResolvedProvider } from "@/lib/ai-provider";
 import { assertCronAuthorized } from "@/lib/cron-auth";
 import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
+import { stripHashtags } from "@/lib/content-sanitize";
 
 // リプ回り半自動化：
 //   1. アクティブなターゲットアカウントの最新ポストを X API で取得
@@ -97,10 +98,12 @@ function buildPromptForReplies(args: {
         "- 対象ポストの内容にしっかり言及し、自分の視点/経験/具体例を短く加える。",
         "- 自社アカウントのポジショニングを自然に示す（ただし宣伝臭はNG）。",
         "- 140文字以内を目安に、最初の1文でフック。",
+        "- ハッシュタグ（#で始まる語句）を絶対に含めない。",
         "",
         "【出力】",
         `必ず JSON オブジェクトのみ：{"variants":["案1","案2","案3"]}。`,
         "3案はトーンや切り口を変える（例: 共感→逆説→質問 / 同意→補足→実体験）。",
+        "各案は説明文・前置きを含まず、そのまま X に投稿できるリプライ本文のみにする。",
     ].join("\n");
 
     const userText = [
@@ -280,7 +283,12 @@ async function processAccount(
             });
             const parsed = safeJsonParse(llm.text) as { variants?: unknown } | null;
             const variants = Array.isArray(parsed?.variants)
-                ? (parsed!.variants as unknown[]).filter((v): v is string => typeof v === "string" && v.trim().length > 0).slice(0, 3)
+                ? (parsed!.variants as unknown[])
+                    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+                    // ハッシュタグを後処理で強制除去（LLM がルール違反した場合の保険。task020）
+                    .map(v => stripHashtags(v).trim())
+                    .filter(v => v.length > 0)
+                    .slice(0, 3)
                 : [];
             if (variants.length === 0) {
                 errors.push(`@${target.username}: AI 応答のパース失敗`);

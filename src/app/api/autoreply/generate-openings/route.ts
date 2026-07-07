@@ -7,6 +7,7 @@ import { errorResponse } from "@/lib/api-error";
 import { enforceRateLimit, getClientIp } from "@/lib/rate-limit";
 import { resolveAIProviderFromSettings, checkOwnerKeyUsageCap, ownerKeyCapResponse } from "@/lib/ai-provider";
 import { checkFreeDailyGate, byokRequiredResponse, remainingAfterGeneration } from "@/lib/free-trial";
+import { stripHashtags } from "@/lib/content-sanitize";
 
 // 自動リプライキャンペーン用「冒頭バリエーション」量産エンドポイント。
 // 同一テンプレを大量送信すると不自然＆スパム判定リスクが上がるため、
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
             "6. 受け取り手の username などのパーソナライズトークンは入れない（後段で挿入するわけではないため）。",
             "7. すべて日本語。同じ言い回し・同じ語尾の連続は避け、語彙・トーンに自然なバラつきを持たせる。",
             "8. 「いいね/RT/リプ ありがとうございます」「ご反応ありがとうございます」「気になってもらえて嬉しいです」など、X のリアクションを受けた直後の自然な反応のバリエーションを中心にする。",
+            "9. ハッシュタグ（#で始まる語句）を絶対に含めない。",
             "",
             "【出力形式】",
             `{"openings": ["冒頭文1", "冒頭文2", ...]}`,
@@ -251,7 +253,8 @@ export async function POST(req: Request) {
 
         const openings = rawOpenings
             .filter((s): s is string => typeof s === "string")
-            .map(s => stripUrls(s).replace(/\r?\n+/g, "\n").trim())
+            // URL・ハッシュタグを後処理で強制除去（LLM がルール違反した場合の保険。task020）
+            .map(s => stripHashtags(stripUrls(s)).replace(/\r?\n+/g, "\n").trim())
             .filter(s => s.length > 0 && s.length <= 120)
             .slice(0, MAX_COUNT);
 

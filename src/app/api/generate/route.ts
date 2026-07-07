@@ -7,6 +7,7 @@ import { getActiveXAccount } from "@/lib/active-x-account";
 import { researchGenerate } from "@/lib/research-llm";
 import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
 import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
+import { sanitizeGeneratedContent } from "@/lib/content-sanitize";
 
 // 投稿生成（Claude / OpenAI BYOK）。旧実装は FastAPI に依存していたが、
 // ここでは Next.js 内で LLM を直接呼び出し、ユーザーのナレッジ・ペルソナを
@@ -254,6 +255,8 @@ export async function POST(req: Request) {
                 "あなたは X(Twitter) で高エンゲージメントを出すプロのコピーライターです。",
                 "まず web 検索で『今この瞬間』の最新トレンド・ニュース・話題を調べ、それを踏まえて X 投稿を1本だけ作成します。",
                 "出力は完成した投稿本文のみ。説明・前置き・見出し・引用符・コードフェンス・URL は一切含めないでください。",
+                "【厳守】「投稿を作成します」「〜を踏まえて」等のあなた自身の作業についての発言（メタ発話）を本文の前後に一切書かない。区切り線（---等）も禁止。出力の1文字目から最後の1文字までが、そのままXに投稿できる本文そのものであること。",
+                "【厳守】ハッシュタグ（#で始まる語句）を本文中・末尾のいずれにも一切付けない。",
                 enforce140 ? "本文は必ず 140 文字以内に収めてください。" : "本文は読みやすい長さに収めてください。",
             ].join("\n");
             const researchUser = [
@@ -285,7 +288,7 @@ export async function POST(req: Request) {
             );
             try {
                 const { content: rc, researchLog } = await researchGenerate(provider, researchSystem, researchUser);
-                const cleaned = stripUrls(rc);
+                const cleaned = sanitizeGeneratedContent(stripUrls(rc));
                 if (cleaned.length > 0) {
                     // 成功: 予約行を research 実績へ確定（当社鍵時のみ実体・自鍵は no-op）。
                     await guard.finalize({
@@ -341,7 +344,9 @@ export async function POST(req: Request) {
             "7. 投稿本文に URL を絶対に含めない（http://、https://、www.、t.co 等の短縮 URL も全て禁止）。",
             "8. 【誘導禁止・デフォルト】投稿の末尾に『プロフへ』『固ツイ参照』『DM ください』『続きはこちら』等の外部誘導を基本入れない。投稿単体で完結する価値提供を優先する。",
             "9. 例外: ユーザーが指定した『メインテーマ』に明示的に誘導の指示（『プロフに誘導する』『LINE登録を促す』等）が含まれている場合のみ、その意図に沿った誘導を末尾に入れて良い。",
-            enforce140 ? "10. 140 文字以内に厳格に収める。" : "10. 文字数の上限は柔軟。内容を優先し、長文になりすぎないよう注意。",
+            "10. ハッシュタグ（#で始まる語句）を content 内に一切含めない。本文中にもハッシュタグ列を末尾に付けない。",
+            "11. content の値はそのまま X に投稿できる完成本文のみ。「投稿を作成します」等のメタ発話・区切り線（---等）・解説・前置き・後書きを content 内に絶対に含めない。",
+            enforce140 ? "12. 140 文字以内に厳格に収める。" : "12. 文字数の上限は柔軟。内容を優先し、長文になりすぎないよう注意。",
             "",
             "【出力形式】",
             `{"content": "そのまま X にコピペできる完成版の投稿本文"}`,
@@ -410,8 +415,8 @@ export async function POST(req: Request) {
                 lastOutputTokens = llm.outputTokens;
                 const obj = safeJsonParse(llm.text) as { content?: unknown } | null;
                 if (obj && typeof obj.content === "string" && obj.content.trim().length > 0) {
-                    // URL を後処理で強制除去（LLM がルール違反した場合の保険）
-                    content = stripUrls(obj.content);
+                    // URL・前置き/後書き・ハッシュタグを後処理で強制除去（LLM がルール違反した場合の保険）
+                    content = sanitizeGeneratedContent(stripUrls(obj.content));
                     if (content.length > 0) {
                         parseOk = true;
                         break;

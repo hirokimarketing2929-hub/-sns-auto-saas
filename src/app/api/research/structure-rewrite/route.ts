@@ -6,6 +6,7 @@ import { logLlmUsage } from "@/lib/api-usage";
 import { getActiveXAccount } from "@/lib/active-x-account";
 import { resolveAIProviderFromSettings } from "@/lib/ai-provider";
 import { enforceLlmRateLimit, acquireOwnerKeyGuard } from "@/lib/owner-key-guard";
+import { stripHashtags } from "@/lib/content-sanitize";
 
 // 2段階フロー（Claude / OpenAI 両対応 BYOK 版）:
 //   Step 1: 元ポスト → テーマ固有部分だけを [プレースホルダ] 化したテンプレート抽出
@@ -207,7 +208,8 @@ const EXTRACT_SYSTEM_TEXT = [
     "6. 元の文章構造を壊さないよう、細切れに [...] を入れすぎない。1つの具体例は1つのプレースホルダにまとめる。",
     "7. 元ポストに URL（http/https/www/t.co 等）が含まれていた場合、その URL 部分ごと [CTA] や [誘導] などのプレースホルダに置き換える（URL 文字列は template に残さない）。",
     "8. 元ポストが `---` 区切りで複数のセグメントに分かれている場合は、ツリー型（本人連投スレッド）全体を1つの型として抽出する。区切りはそのまま残し、各セグメントが「フック→展開→締め」のような流れになっている場合はその構造を保ったまま [...] 化する。",
-    "9. 出力は必ず JSON オブジェクトのみ。説明文・前置き・マークダウンは一切禁止。",
+    "9. 元ポストにハッシュタグ（#で始まる語句）が含まれていた場合、そのハッシュタグ部分ごと template から取り除く（プレースホルダ化も含めて一切残さない）。",
+    "10. 出力は必ず JSON オブジェクトのみ。説明文・前置き・マークダウンは一切禁止。",
 ].join("\n");
 
 function buildExtractUserText(sourceText: string): string {
@@ -297,7 +299,8 @@ const FILL_SYSTEM_TEXT = [
     "6. 値には URL（http://、https://、www.、t.co 等の短縮 URL を含む）を絶対に含めない。",
     "7. 【誘導禁止・デフォルト】[CTA]・[誘導] 等の誘導系プレースホルダの値は、基本的に『（空文字）』『（誘導なし）』または自然な終わりとなる短い一言（例: 『試してみてください』『保存推奨です』）で埋める。『プロフへ』『DM ください』『LINE登録』などの外部誘導は入れない。",
     "8. 例外: ユーザーのメインテーマに誘導の指示が明示的に含まれている場合のみ、そのとおりの誘導値を入れて良い。",
-    "9. 出力は必ず JSON オブジェクトのみ。説明文・前置き・マークダウン・余計なキーは一切禁止。",
+    "9. 値にハッシュタグ（#で始まる語句）を絶対に含めない。",
+    "10. 出力は必ず JSON オブジェクトのみ。説明文・前置き・マークダウン・余計なキーは一切禁止。",
 ].join("\n");
 
 function buildFillContextText(persona: Persona, knowledge: KnowledgeBundle): string {
@@ -446,8 +449,11 @@ async function generateOneVariant(opts: {
                 console.warn(`[${opts.angle.key}] unfilled placeholders remain, retrying`);
                 continue;
             }
-            // URL 後処理（fills に URL が紛れ込んでいたら強制除去）
-            const cleaned = stripUrls(filled);
+            // URL・ハッシュタグを後処理で強制除去（fills に紛れ込んでいた場合の保険）。
+            // 注意: このルートの出力は元ポストの構造をそのまま複製したテンプレート（本人連投スレッドの
+            // `---` 区切りを意図的に保持する仕様＝EXTRACT_SYSTEM_TEXT ルール8）のため、
+            // 前置き/区切り線除去（sanitizeGeneratedContent）は適用せず、ハッシュタグ除去のみ行う。
+            const cleaned = stripHashtags(stripUrls(filled));
             if (isNearDuplicate(opts.sourceText, cleaned)) continue;
             return cleaned;
         } catch (e) {
